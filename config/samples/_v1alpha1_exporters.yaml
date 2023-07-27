@@ -1,0 +1,12 @@
+apiVersion: udmire.cn/v1alpha1
+kind: Exporters
+metadata:
+  labels:
+    app.kubernetes.io/name: exporters
+    app.kubernetes.io/instance: exporters-sample
+    app.kubernetes.io/part-of: observability-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: observability-operator
+  name: exporters-sample
+spec:
+  # TODO(user): Add fields here

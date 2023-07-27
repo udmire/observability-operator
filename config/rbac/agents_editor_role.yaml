@@ -1,0 +1,31 @@
+# permissions for end users to edit agents.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: agents-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: observability-operator
+    app.kubernetes.io/part-of: observability-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: agents-editor-role
+rules:
+- apiGroups:
+  - udmire.cn
+  resources:
+  - agents
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - udmire.cn
+  resources:
+  - agents/status
+  verbs:
+  - get

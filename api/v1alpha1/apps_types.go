@@ -23,13 +23,13 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// ExportersSpec defines the desired state of Exporters
-type ExportersSpec struct {
-	Exployments map[string]AppSpec `json:"exployments,omitempty"`
+// AppsSpec defines the desired state of Apps
+type AppsSpec struct {
+	Apployments map[string]AppSpec `json:"apployments,omitempty"`
 }
 
-// ExportersStatus defines the observed state of Exporters
-type ExportersStatus struct {
+// AppsStatus defines the observed state of Apps
+type AppsStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
@@ -37,24 +37,24 @@ type ExportersStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Exporters is the Schema for the exporters API
-type Exporters struct {
+// Apps is the Schema for the apps API
+type Apps struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ExportersSpec   `json:"spec,omitempty"`
-	Status ExportersStatus `json:"status,omitempty"`
+	Spec   AppsSpec   `json:"spec,omitempty"`
+	Status AppsStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// ExportersList contains a list of Exporters
-type ExportersList struct {
+// AppsList contains a list of Apps
+type AppsList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Exporters `json:"items"`
+	Items           []Apps `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Exporters{}, &ExportersList{})
+	SchemeBuilder.Register(&Apps{}, &AppsList{})
 }

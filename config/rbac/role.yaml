@@ -1,0 +1,84 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - udmire.cn
+  resources:
+  - agents
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - udmire.cn
+  resources:
+  - agents/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - udmire.cn
+  resources:
+  - agents/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - udmire.cn
+  resources:
+  - apps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - udmire.cn
+  resources:
+  - apps/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - udmire.cn
+  resources:
+  - apps/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - udmire.cn
+  resources:
+  - exporters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - udmire.cn
+  resources:
+  - exporters/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - udmire.cn
+  resources:
+  - exporters/status
+  verbs:
+  - get
+  - patch
+  - update

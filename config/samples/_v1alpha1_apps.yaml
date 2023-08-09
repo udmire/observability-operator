@@ -1,0 +1,12 @@
+apiVersion: udmire.cn/v1alpha1
+kind: Apps
+metadata:
+  labels:
+    app.kubernetes.io/name: apps
+    app.kubernetes.io/instance: apps-sample
+    app.kubernetes.io/part-of: observability-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: observability-operator
+  name: apps-sample
+spec:
+  # TODO(user): Add fields here

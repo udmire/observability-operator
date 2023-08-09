@@ -25,11 +25,7 @@ import (
 
 // AgentsSpec defines the desired state of Agents
 type AgentsSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Agents. Edit agents_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	AppSpec `json:",inline"`
 }
 
 // AgentsStatus defines the observed state of Agents

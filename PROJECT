@@ -11,6 +11,7 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
+  controller: true
   domain: udmire.cn
   kind: Agents
   path: github.com/udmire/observability-operator/api/v1alpha1
@@ -18,8 +19,17 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
+  controller: true
   domain: udmire.cn
   kind: Exporters
+  path: github.com/udmire/observability-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: udmire.cn
+  kind: Apps
   path: github.com/udmire/observability-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

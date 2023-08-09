@@ -32,6 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	udmirecnv1alpha1 "github.com/udmire/observability-operator/api/v1alpha1"
+	"github.com/udmire/observability-operator/pkg/operator/agents"
+	"github.com/udmire/observability-operator/pkg/operator/apps"
+	"github.com/udmire/observability-operator/pkg/operator/exporters"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -88,6 +91,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&exporters.ExportersReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Exporters")
+		os.Exit(1)
+	}
+	if err = (&agents.AgentsReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Agents")
+		os.Exit(1)
+	}
+	if err = (&apps.AppsReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Apps")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

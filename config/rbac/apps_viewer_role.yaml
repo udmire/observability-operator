@@ -1,0 +1,27 @@
+# permissions for end users to view apps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: apps-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: observability-operator
+    app.kubernetes.io/part-of: observability-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: apps-viewer-role
+rules:
+- apiGroups:
+  - udmire.cn
+  resources:
+  - apps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - udmire.cn
+  resources:
+  - apps/status
+  verbs:
+  - get

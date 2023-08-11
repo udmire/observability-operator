@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/udmire/observability-operator/pkg/utils"
 )
 
 const (
@@ -160,19 +161,37 @@ func (l *templatesLoader) handleTarGzFile(path, appVer string) (*AppTemplate, er
 	return l.loadTemplateWithFolder(appVer, tempDir)
 }
 
-func (l *templatesLoader) loadTemplateWithFolder(appVer, tempDir string) (*AppTemplate, error) {
+func (l *templatesLoader) loadTemplateWithFolder(appVer, tempDir string) (app *AppTemplate, err error) {
 	appVerArr := strings.Split(appVer, "_")
 	if len(appVerArr) != 2 {
 		level.Warn(l.logger).Log("msg", "the template filename not match pattern 'app_version'", "template", appVer)
 		return nil, fmt.Errorf("invalid app package name %s", appVer)
 	}
-	app := &AppTemplate{
+
+	appFS := os.DirFS(tempDir)
+
+	rootPath := "."
+	var exists bool
+	if exists, err = utils.HasOnlySubDirectory(tempDir, appVer); exists {
+		rootPath = appVer
+	}
+	if err != nil {
+		level.Warn(l.logger).Log("msg", "inliad application package", "err", err)
+		return nil, err
+	}
+	if exists, err = utils.HasOnlySubDirectory(tempDir, appVerArr[0]); exists {
+		rootPath = appVerArr[0]
+	}
+	if err != nil {
+		level.Warn(l.logger).Log("msg", "inliad application package", "err", err)
+		return nil, err
+	}
+
+	app = &AppTemplate{
 		TemplateBase: TemplateBase{Name: appVerArr[0], Version: appVerArr[1]},
 		Workloads:    map[string]*WorkloadTemplate{},
 	}
-
-	appFS := os.DirFS(tempDir)
-	err := fs.WalkDir(appFS, appVer, func(path string, entry fs.DirEntry, err error) error {
+	err = fs.WalkDir(appFS, rootPath, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			level.Warn(l.logger).Log("msg", "failed to walk content of template", "template", appVer, "err", err)
 			return err

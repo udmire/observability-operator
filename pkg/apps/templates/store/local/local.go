@@ -1,15 +1,20 @@
 package local
 
 import (
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/dskit/services"
 	"github.com/udmire/observability-operator/pkg/apps/templates/template"
+	"github.com/udmire/observability-operator/pkg/utils"
 )
 
 const (
@@ -20,7 +25,15 @@ type Config struct {
 	Directory string `yaml:"directory"`
 }
 
+func (c *Config) RegisterFlags(f *flag.FlagSet) {
+	f.StringVar(&c.Directory, "templates.store.directory", "/data/templates", "where the templates stored in local.")
+}
+
 type LocalStore struct {
+	*services.BasicService
+
+	watcher *fsnotify.Watcher
+
 	cfg Config
 
 	logger    log.Logger
@@ -30,13 +43,15 @@ type LocalStore struct {
 }
 
 func New(cfg Config, logger log.Logger) *LocalStore {
-	return &LocalStore{
+	store := &LocalStore{
 		cfg:       cfg,
 		lock:      sync.Mutex{},
 		logger:    logger,
 		loader:    template.NewTemplateLoader(logger),
 		templates: make(map[string]*template.AppTemplate),
 	}
+	store.BasicService = services.NewBasicService(store.startup, store.watching, store.shutdown)
+	return store
 }
 
 func (l *LocalStore) Load() error {
@@ -46,10 +61,13 @@ func (l *LocalStore) Load() error {
 		}
 
 		if entry.IsDir() {
-			return nil // ignore all the content in sub folder.
+			if path == "." {
+				return nil
+			}
+			return fs.SkipDir // ignore all the content in sub folder.
 		}
 
-		return l.LoadTemplate(path)
+		return l.LoadTemplate(filepath.Join(l.cfg.Directory, path))
 	})
 
 	if err != nil {
@@ -65,6 +83,11 @@ func (l *LocalStore) LoadTemplate(path string) error {
 	if err != nil {
 		return err
 	}
+
+	if temp == nil {
+		return nil
+	}
+
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	l.templates[appVer] = temp
@@ -108,4 +131,28 @@ func (l *LocalStore) GetTemplate(name, version string) *template.AppTemplate {
 	}
 
 	return nil
+}
+
+func (l *LocalStore) GetLatestTemplate(name string) *template.AppTemplate {
+	temps := l.templates
+	appPrefix := fmt.Sprintf("%s_", name)
+
+	var result *template.AppTemplate
+	var latest string
+
+	for k, at := range temps {
+		if !strings.HasPrefix(k, appPrefix) {
+			continue
+		}
+		version := strings.TrimLeft(k, appPrefix)
+		if len(latest) <= 0 {
+			latest = version
+			result = at
+		} else if utils.IsNewerThan(version, latest) {
+			latest = version
+			result = at
+		}
+	}
+
+	return result
 }

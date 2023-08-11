@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/dskit/services"
 	app_v1 "k8s.io/api/apps/v1"
 	autoscaling_v1 "k8s.io/api/autoscaling/v1"
 	batch_v1 "k8s.io/api/batch/v1"
@@ -38,21 +39,43 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
-)
-
-const (
-	defaultConcurrency = 3
+	"github.com/udmire/observability-operator/pkg/apps/templates/provider"
 )
 
 // ExportersReconciler reconciles a Exporters object
 type ExportersReconciler struct {
+	*services.BasicService
+
 	client.Client
 	Scheme *runtime.Scheme
 
-	concurrency   int
+	cfg Config
+
+	mgr ctrl.Manager
+
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
 	logger        log.Logger
+}
+
+func New(client client.Client, schema *runtime.Scheme, config Config, tp provider.TemplateProvider, logger log.Logger) *ExportersReconciler {
+	reconciler := &ExportersReconciler{
+		Client: client,
+		Scheme: schema,
+		cfg:    config,
+
+		handler:       specs.New(tp, logger),
+		appReconciler: reconcile.New(logger),
+		logger:        logger,
+	}
+	reconciler.BasicService = services.NewIdleService(func(serviceContext context.Context) error {
+		return reconciler.SetupWithManager(reconciler.mgr)
+	}, nil)
+	return reconciler
+}
+
+func (r *ExportersReconciler) SetManager(mgr ctrl.Manager) {
+	r.mgr = mgr
 }
 
 //+kubebuilder:rbac:groups=udmire.cn,resources=exporters,verbs=get;list;watch;create;update;patch;delete
@@ -81,10 +104,6 @@ func (r *ExportersReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	if r.concurrency <= 0 {
-		r.concurrency = defaultConcurrency
-	}
-
 	r.normalizeExporters(&instance)
 	owner := metav1.OwnerReference{
 		APIVersion:         instance.APIVersion,
@@ -96,7 +115,7 @@ func (r *ExportersReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, r.concurrency)
+	semaphore := make(chan struct{}, r.cfg.Concurrency)
 	for _, exploy := range instance.Spec.Exployments {
 		wg.Add(1)
 		go func(app v1alpha1.AppSpec) {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/dskit/services"
 	app_v1 "k8s.io/api/apps/v1"
 	autoscaling_v1 "k8s.io/api/autoscaling/v1"
 	batch_v1 "k8s.io/api/batch/v1"
@@ -37,16 +38,40 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
+	"github.com/udmire/observability-operator/pkg/apps/templates/provider"
 )
 
 // AgentsReconciler reconciles a Agents object
 type AgentsReconciler struct {
+	*services.BasicService
+
 	client.Client
 	Scheme *runtime.Scheme
+
+	mgr ctrl.Manager
 
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
 	logger        log.Logger
+}
+
+func New(client client.Client, schema *runtime.Scheme, tp provider.TemplateProvider, logger log.Logger) *AgentsReconciler {
+	reconciler := &AgentsReconciler{
+		Client: client,
+		Scheme: schema,
+
+		handler:       specs.New(tp, logger),
+		appReconciler: reconcile.New(logger),
+		logger:        logger,
+	}
+	reconciler.BasicService = services.NewIdleService(func(serviceContext context.Context) error {
+		return reconciler.SetupWithManager(reconciler.mgr)
+	}, nil)
+	return reconciler
+}
+
+func (r *AgentsReconciler) SetManager(mgr ctrl.Manager) {
+	r.mgr = mgr
 }
 
 //+kubebuilder:rbac:groups=udmire.cn,resources=agents,verbs=get;list;watch;create;update;patch;delete

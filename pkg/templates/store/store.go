@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/grafana/dskit/cache"
-	"github.com/udmire/observability-operator/pkg/apps/templates/provider"
-	"github.com/udmire/observability-operator/pkg/apps/templates/store/local"
-	"github.com/udmire/observability-operator/pkg/apps/templates/store/remote"
+	"github.com/udmire/observability-operator/pkg/templates/provider"
+	"github.com/udmire/observability-operator/pkg/templates/store/local"
+	"github.com/udmire/observability-operator/pkg/templates/store/remote"
 )
 
 var supportedCacheBackends = []string{cache.BackendMemcached, cache.BackendRedis}

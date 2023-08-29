@@ -23,23 +23,19 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
-	app_v1 "k8s.io/api/apps/v1"
-	autoscaling_v1 "k8s.io/api/autoscaling/v1"
-	batch_v1 "k8s.io/api/batch/v1"
-	core_v1 "k8s.io/api/core/v1"
-	networking_v1 "k8s.io/api/networking/v1"
-	rbac_v1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
-	"github.com/udmire/observability-operator/pkg/apps/templates/provider"
+	"github.com/udmire/observability-operator/pkg/operator/manager"
+	"github.com/udmire/observability-operator/pkg/templates/provider"
 )
 
 // AppsReconciler reconciles a Apps object
@@ -52,6 +48,7 @@ type AppsReconciler struct {
 	cfg Config
 
 	mgr ctrl.Manager
+	cnp manager.ClusterNameProvider
 
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
@@ -65,7 +62,7 @@ func New(client client.Client, schema *runtime.Scheme, config Config, tp provide
 
 		cfg:           config,
 		handler:       specs.New(tp, logger),
-		appReconciler: reconcile.New(logger),
+		appReconciler: reconcile.New(logger, client),
 		logger:        logger,
 	}
 	reconciler.BasicService = services.NewIdleService(func(serviceContext context.Context) error {
@@ -76,6 +73,10 @@ func New(client client.Client, schema *runtime.Scheme, config Config, tp provide
 
 func (r *AppsReconciler) SetManager(mgr ctrl.Manager) {
 	r.mgr = mgr
+}
+
+func (r *AppsReconciler) SetClusterNameProvider(cnp manager.ClusterNameProvider) {
+	r.cnp = cnp
 }
 
 //+kubebuilder:rbac:groups=udmire.cn,resources=apps,verbs=get;list;watch;create;update;patch;delete
@@ -95,8 +96,8 @@ func (r *AppsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	level.Info(r.logger).Log("msg", "reconciling applications")
 	defer level.Info(r.logger).Log("msg", "done reconciling applications")
 
-	var instance v1alpha1.Apps
-	if err := r.Get(ctx, req.NamespacedName, &instance); apierrors.IsNotFound(err) {
+	instance := &v1alpha1.Apps{}
+	if err := r.Get(ctx, req.NamespacedName, instance); apierrors.IsNotFound(err) {
 		level.Error(r.logger).Log("msg", "detected deleted Apps", "err", err)
 		return ctrl.Result{}, nil
 	} else if err != nil {
@@ -104,7 +105,37 @@ func (r *AppsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	r.normalizeApps(&instance)
+	r.normalizeApps(instance)
+
+	finalizerName := "apps.udmire.cn/finalizer"
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(instance, finalizerName) {
+			controllerutil.AddFinalizer(instance, finalizerName)
+			if err := r.Update(ctx, instance); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(instance, finalizerName) {
+			for _, apploy := range instance.Spec.Apployments {
+				selector := r.handler.Selector(apploy)
+				if err := r.appReconciler.CleanClusterLayerResources(instance.UID, selector); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(instance, finalizerName)
+			if err := r.Update(ctx, instance); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
+
 	owner := metav1.OwnerReference{
 		APIVersion:         instance.APIVersion,
 		BlockOwnerDeletion: pointer.Bool(true),
@@ -146,22 +177,6 @@ func (r *AppsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *AppsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Apps{}).
-		Owns(&core_v1.ConfigMap{}).
-		Owns(&core_v1.Secret{}).
-		Owns(&core_v1.ServiceAccount{}).
-		Owns(&core_v1.Service{}).
-		Owns(&app_v1.Deployment{}).
-		Owns(&app_v1.DaemonSet{}).
-		Owns(&app_v1.StatefulSet{}).
-		Owns(&app_v1.ReplicaSet{}).
-		Owns(&batch_v1.Job{}).
-		Owns(&batch_v1.CronJob{}).
-		Owns(&networking_v1.Ingress{}).
-		Owns(&rbac_v1.ClusterRole{}).
-		Owns(&rbac_v1.ClusterRoleBinding{}).
-		Owns(&rbac_v1.RoleBinding{}).
-		Owns(&rbac_v1.Role{}).
-		Owns(&autoscaling_v1.HorizontalPodAutoscaler{}).
 		Complete(r)
 }
 

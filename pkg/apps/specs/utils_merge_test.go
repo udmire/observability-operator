@@ -27,7 +27,7 @@ func TestMergePatchContainers(t *testing.T) {
 					Args: []string{"command"},
 					Resources: core_v1.ResourceRequirements{
 						Limits: core_v1.ResourceList{
-							core_v1.ResourceCPU: resource.Quantity{},
+							core_v1.ResourceCPU: resource.MustParse("0"),
 						},
 					},
 				}, {
@@ -38,7 +38,7 @@ func TestMergePatchContainers(t *testing.T) {
 					Args: []string{"--args"},
 					Resources: core_v1.ResourceRequirements{
 						Requests: core_v1.ResourceList{
-							core_v1.ResourceCPU: resource.Quantity{},
+							core_v1.ResourceCPU: resource.MustParse("0"),
 						},
 					},
 				}},
@@ -48,10 +48,10 @@ func TestMergePatchContainers(t *testing.T) {
 				Args: []string{"--args"},
 				Resources: core_v1.ResourceRequirements{
 					Requests: core_v1.ResourceList{
-						core_v1.ResourceCPU: resource.Quantity{},
+						core_v1.ResourceCPU: resource.MustParse("0"),
 					},
 					Limits: core_v1.ResourceList{
-						core_v1.ResourceCPU: resource.Quantity{},
+						core_v1.ResourceCPU: resource.MustParse("0"),
 					},
 				},
 			}, {

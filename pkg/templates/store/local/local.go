@@ -13,7 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
-	"github.com/udmire/observability-operator/pkg/apps/templates/template"
+	"github.com/udmire/observability-operator/pkg/templates/template"
 	"github.com/udmire/observability-operator/pkg/utils"
 )
 

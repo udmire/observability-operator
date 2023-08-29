@@ -14,12 +14,13 @@ import (
 	"github.com/grafana/dskit/services"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/udmire/observability-operator/pkg/apps/templates/store"
 	"github.com/udmire/observability-operator/pkg/configs/logging"
 	"github.com/udmire/observability-operator/pkg/operator/agents"
 	"github.com/udmire/observability-operator/pkg/operator/apps"
 	"github.com/udmire/observability-operator/pkg/operator/exporters"
 	"github.com/udmire/observability-operator/pkg/operator/manager"
+	"github.com/udmire/observability-operator/pkg/templates/provider"
+	"github.com/udmire/observability-operator/pkg/templates/store/category"
 	"github.com/udmire/observability-operator/pkg/utils"
 	util_log "github.com/udmire/observability-operator/pkg/utils/log"
 	"github.com/udmire/observability-operator/pkg/utils/process"
@@ -40,7 +41,7 @@ type Config struct {
 
 	Apps          apps.Config      `yaml:"apps"`
 	Exporters     exporters.Config `yaml:"exporters"`
-	TemplateStore store.Config     `yaml:"tempate_store"`
+	TemplateStore category.Config  `yaml:"template_store"`
 }
 
 func (c *Config) RegisterFlags(f *flag.FlagSet) {
@@ -79,7 +80,7 @@ type Operator struct {
 	ServiceMap    map[string]services.Service
 	ModuleManager *modules.Manager
 
-	TemplateStore     store.TemplateStore
+	TemplateStore     provider.CategryTemplateProvider
 	ControllerManager manager.CtrlManagerWraper
 
 	AppsController      *apps.AppsReconciler

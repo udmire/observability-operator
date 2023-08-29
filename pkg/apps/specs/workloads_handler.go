@@ -8,8 +8,9 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 )
 
-func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec, ns string, labels map[string]string) error {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
 
 	if spec == nil {
 		return nil
@@ -22,7 +23,7 @@ func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec,
 		manifest.Spec.Selector = spec.Selector
 	}
 	if spec.Template != nil {
-		err := mergePodTemplate(manifest.Spec.Template, spec.Template, labels)
+		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
 		if err != nil {
 			return err
 		}
@@ -39,8 +40,9 @@ func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec,
 	return nil
 }
 
-func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, ns string, labels map[string]string) error {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
 
 	if spec == nil {
 		return nil
@@ -50,7 +52,7 @@ func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, la
 		manifest.Spec.Selector = spec.Selector
 	}
 	if spec.Template != nil {
-		err := mergePodTemplate(manifest.Spec.Template, spec.Template, labels)
+		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
 		if err != nil {
 			return err
 		}
@@ -67,8 +69,9 @@ func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, la
 	return nil
 }
 
-func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSpec, ns string, labels map[string]string) error {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
 
 	if spec == nil {
 		return nil
@@ -80,7 +83,7 @@ func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSp
 		manifest.Spec.Selector = spec.Selector
 	}
 	if spec.Template != nil {
-		err := mergePodTemplate(manifest.Spec.Template, spec.Template, labels)
+		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
 		if err != nil {
 			return err
 		}
@@ -112,8 +115,9 @@ func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSp
 	return nil
 }
 
-func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, ns string, labels map[string]string) error {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
 
 	if spec == nil {
 		return nil
@@ -141,7 +145,7 @@ func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, labels map[string]
 		manifest.Spec.ManualSelector = spec.ManualSelector
 	}
 	if spec.Template != nil {
-		err := mergePodTemplate(manifest.Spec.Template, spec.Template, labels)
+		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
 		if err != nil {
 			return err
 		}
@@ -158,8 +162,8 @@ func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, labels map[string]
 	return nil
 }
 
-func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, ns string, labels map[string]string) error {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if spec == nil {
 		return nil
@@ -181,7 +185,7 @@ func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, labels
 		manifest.Spec.Suspend = spec.Suspend
 	}
 	if spec.JobTemplate != nil {
-		err := mergeJobTemplate(manifest.Spec.JobTemplate, spec.JobTemplate, labels)
+		err := mergeJobTemplate(manifest.Spec.JobTemplate, spec.JobTemplate, ns, labels)
 		if err != nil {
 			return err
 		}
@@ -195,8 +199,9 @@ func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, labels
 	return nil
 }
 
-func mergeReplicaSet(manifest *app_v1.ReplicaSet, spec *v1alpha1.ReplicaSetSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeReplicaSet(manifest *app_v1.ReplicaSet, spec *v1alpha1.ReplicaSetSpec, ns string, labels map[string]string) error {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
 
 	if spec == nil {
 		return nil
@@ -211,7 +216,7 @@ func mergeReplicaSet(manifest *app_v1.ReplicaSet, spec *v1alpha1.ReplicaSetSpec,
 		manifest.Spec.Selector = spec.Selector
 	}
 	if spec.Template != nil {
-		err := mergePodTemplate(manifest.Spec.Template, spec.Template, labels)
+		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
 		if err != nil {
 			return err
 		}
@@ -219,8 +224,8 @@ func mergeReplicaSet(manifest *app_v1.ReplicaSet, spec *v1alpha1.ReplicaSetSpec,
 	return nil
 }
 
-func mergePodTemplate(manifest core_v1.PodTemplateSpec, spec *v1alpha1.PodTemplateSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergePodTemplate(manifest *core_v1.PodTemplateSpec, spec *v1alpha1.PodTemplateSpec, ns string, labels map[string]string) error {
+	mergePodTemplateObjectMeta(&manifest.ObjectMeta, labels)
 
 	if spec == nil {
 		return nil
@@ -280,8 +285,8 @@ func mergePodTemplate(manifest core_v1.PodTemplateSpec, spec *v1alpha1.PodTempla
 	return nil
 }
 
-func mergeJobTemplate(manifest batch_v1.JobTemplateSpec, spec *v1alpha1.JobTemplateSpec, labels map[string]string) error {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeJobTemplate(manifest batch_v1.JobTemplateSpec, spec *v1alpha1.JobTemplateSpec, ns string, labels map[string]string) error {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if spec == nil {
 		return nil
@@ -309,7 +314,7 @@ func mergeJobTemplate(manifest batch_v1.JobTemplateSpec, spec *v1alpha1.JobTempl
 		manifest.Spec.ManualSelector = spec.Spec.ManualSelector
 	}
 	if spec.Spec.Template != nil {
-		err := mergePodTemplate(manifest.Spec.Template, spec.Spec.Template, labels)
+		err := mergePodTemplate(&manifest.Spec.Template, spec.Spec.Template, ns, labels)
 		if err != nil {
 			return err
 		}

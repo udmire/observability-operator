@@ -1,4 +1,4 @@
-package reconcile
+package client
 
 import (
 	"context"
@@ -7,12 +7,14 @@ import (
 	"strings"
 
 	apps_v1 "k8s.io/api/apps/v1"
+	autoscaling_v1 "k8s.io/api/autoscaling/v1"
 	batch_v1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	networking_v1 "k8s.io/api/networking/v1"
 	rbac_v1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -146,7 +148,7 @@ func CreateOrUpdateClusterRole(ctx context.Context, c client.Client, clusterRole
 
 // CreateOrUpdateClusterRoleBinding applies the given crb against the client.
 func CreateOrUpdateClusterRoleBinding(ctx context.Context, c client.Client, crb *rbac_v1.ClusterRoleBinding) error {
-	var exist v1.Service
+	var exist rbac_v1.ClusterRoleBinding
 	err := c.Get(ctx, client.ObjectKeyFromObject(crb), &exist)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return fmt.Errorf("failed to retrieve existing clusterRoleBinding: %w", err)
@@ -550,10 +552,82 @@ func CreateOrUpdateCronJob(ctx context.Context, c client.Client, d *batch_v1.Cro
 				return fmt.Errorf("failed to update CronJob: creating new CronJob: %w", err)
 			}
 		} else if err != nil {
-			return fmt.Errorf("failed to update Deployment: %w", err)
+			return fmt.Errorf("failed to update CronJob: %w", err)
 		}
 	}
 
+	return nil
+}
+
+// CreateOrUpdateHPA applies the given HPA against the client.
+func CreateOrUpdateHPA(ctx context.Context, c client.Client, as *autoscaling_v1.HorizontalPodAutoscaler) error {
+	var exist autoscaling_v1.HorizontalPodAutoscaler
+	err := c.Get(ctx, client.ObjectKeyFromObject(as), &exist)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return fmt.Errorf("failed to retrieve existing HPA: %w", err)
+	}
+
+	if k8s_errors.IsNotFound(err) {
+		err := c.Create(ctx, as)
+		if err != nil {
+			return fmt.Errorf("failed to create HPA: %w", err)
+		}
+	} else {
+		as.ResourceVersion = exist.ResourceVersion
+		as.SetOwnerReferences(mergeOwnerReferences(as.GetOwnerReferences(), exist.GetOwnerReferences()))
+		as.SetLabels(mergeMaps(as.Labels, exist.Labels))
+		as.SetAnnotations(mergeMaps(as.Annotations, exist.Annotations))
+
+		err := c.Update(ctx, as)
+		if k8s_errors.IsNotAcceptable(err) || k8s_errors.IsInvalid(err) {
+			// Resource version should only be set when updating
+			as.ResourceVersion = ""
+
+			err = c.Delete(ctx, as)
+			if err != nil {
+				return fmt.Errorf("failed to update HPA: deleting old HPA: %w", err)
+			}
+			err = c.Create(ctx, as)
+			if err != nil {
+				return fmt.Errorf("failed to update HPA: creating new HPA: %w", err)
+			}
+		} else if err != nil {
+			return fmt.Errorf("failed to update HPA: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func CleanClusterRoles(ctx context.Context, c client.Client, uid types.UID, selector labels.Selector) error {
+	crlist := &rbac_v1.ClusterRoleList{}
+	err := c.List(ctx, crlist, &client.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return err
+	}
+	for _, cr := range crlist.Items {
+		for _, ref := range cr.OwnerReferences {
+			if ref.UID == uid {
+				c.Delete(ctx, &cr)
+			}
+		}
+	}
+	return nil
+}
+
+func CleanClusterRoleBindings(ctx context.Context, c client.Client, uid types.UID, selector labels.Selector) error {
+	crblist := &rbac_v1.ClusterRoleBindingList{}
+	err := c.List(ctx, crblist, &client.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return err
+	}
+	for _, cr := range crblist.Items {
+		for _, ref := range cr.OwnerReferences {
+			if ref.UID == uid {
+				c.Delete(ctx, &cr)
+			}
+		}
+	}
 	return nil
 }
 

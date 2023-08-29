@@ -22,23 +22,20 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
-	app_v1 "k8s.io/api/apps/v1"
-	autoscaling_v1 "k8s.io/api/autoscaling/v1"
-	batch_v1 "k8s.io/api/batch/v1"
-	core_v1 "k8s.io/api/core/v1"
-	networking_v1 "k8s.io/api/networking/v1"
-	rbac_v1 "k8s.io/api/rbac/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
-	"github.com/udmire/observability-operator/pkg/apps/templates/provider"
+	"github.com/udmire/observability-operator/pkg/operator/manager"
+	"github.com/udmire/observability-operator/pkg/templates/provider"
 )
 
 // AgentsReconciler reconciles a Agents object
@@ -49,6 +46,7 @@ type AgentsReconciler struct {
 	Scheme *runtime.Scheme
 
 	mgr ctrl.Manager
+	cnp manager.ClusterNameProvider
 
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
@@ -61,7 +59,7 @@ func New(client client.Client, schema *runtime.Scheme, tp provider.TemplateProvi
 		Scheme: schema,
 
 		handler:       specs.New(tp, logger),
-		appReconciler: reconcile.New(logger),
+		appReconciler: reconcile.New(logger, client),
 		logger:        logger,
 	}
 	reconciler.BasicService = services.NewIdleService(func(serviceContext context.Context) error {
@@ -72,6 +70,10 @@ func New(client client.Client, schema *runtime.Scheme, tp provider.TemplateProvi
 
 func (r *AgentsReconciler) SetManager(mgr ctrl.Manager) {
 	r.mgr = mgr
+}
+
+func (r *AgentsReconciler) SetClusterNameProvider(cnp manager.ClusterNameProvider) {
+	r.cnp = cnp
 }
 
 //+kubebuilder:rbac:groups=udmire.cn,resources=agents,verbs=get;list;watch;create;update;patch;delete
@@ -91,8 +93,8 @@ func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	level.Info(r.logger).Log("msg", "reconciling agent")
 	defer level.Info(r.logger).Log("msg", "done reconciling agent")
 
-	var instance v1alpha1.Agents
-	if err := r.Get(ctx, req.NamespacedName, &instance); apierrors.IsNotFound(err) {
+	instance := &v1alpha1.Agents{}
+	if err := r.Get(ctx, req.NamespacedName, instance); apierrors.IsNotFound(err) {
 		level.Error(r.logger).Log("msg", "detected deleted Agents", "err", err)
 		return ctrl.Result{}, nil
 	} else if err != nil {
@@ -100,7 +102,35 @@ func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	r.normalizeInstance(&instance)
+	r.normalizeInstance(instance)
+
+	finalizerName := "agents.udmire.cn/finalizer"
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(instance, finalizerName) {
+			controllerutil.AddFinalizer(instance, finalizerName)
+			if err := r.Update(ctx, instance); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(instance, finalizerName) {
+			selector := r.handler.Selector(instance.Spec.AppSpec)
+			if err := r.appReconciler.CleanClusterLayerResources(instance.UID, selector); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(instance, finalizerName)
+			if err := r.Update(ctx, instance); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
+
 	owner := metav1.OwnerReference{
 		APIVersion:         instance.APIVersion,
 		BlockOwnerDeletion: pointer.Bool(true),
@@ -116,6 +146,8 @@ func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
+	r.handler.Decorate(manifest, specs.ClusterNameEnvDecorator(r.cnp))
+
 	err = r.appReconciler.Reconcile(owner, "agents", instance.Name, manifest)
 	if err != nil {
 		level.Error(r.logger).Log("msg", "failed to apply manifests", "instance", instance.Name, "err", err)
@@ -129,26 +161,47 @@ func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *AgentsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Agents{}).
-		Owns(&core_v1.ConfigMap{}).
-		Owns(&core_v1.Secret{}).
-		Owns(&core_v1.ServiceAccount{}).
-		Owns(&core_v1.Service{}).
-		Owns(&app_v1.Deployment{}).
-		Owns(&app_v1.DaemonSet{}).
-		Owns(&app_v1.StatefulSet{}).
-		Owns(&app_v1.ReplicaSet{}).
-		Owns(&batch_v1.Job{}).
-		Owns(&batch_v1.CronJob{}).
-		Owns(&networking_v1.Ingress{}).
-		Owns(&rbac_v1.ClusterRole{}).
-		Owns(&rbac_v1.ClusterRoleBinding{}).
-		Owns(&rbac_v1.RoleBinding{}).
-		Owns(&rbac_v1.Role{}).
-		Owns(&autoscaling_v1.HorizontalPodAutoscaler{}).
 		Complete(r)
 }
 
 func (r *AgentsReconciler) normalizeInstance(instance *v1alpha1.Agents) {
 	instance.Spec.Name = instance.Name
 	instance.Spec.Namespace = instance.Namespace
+
+	for _, comp := range instance.Spec.Components {
+		if comp.DaemonSet != nil {
+			r.updatePodTemplateEnv(comp.DaemonSet.Template)
+		}
+		if comp.Deployment != nil {
+			r.updatePodTemplateEnv(comp.Deployment.Template)
+		}
+		if comp.StatefulSet != nil {
+		}
+	}
+}
+func (r *AgentsReconciler) updatePodTemplateEnv(spec *v1alpha1.PodTemplateSpec) {
+	const clusterNameEnv = "K8S_CLUSTER_NAME"
+	for _, container := range spec.Spec.InitContainers {
+		for _, env := range container.Env {
+			if env.Name == clusterNameEnv {
+				return
+			}
+		}
+		container.Env = append(container.Env, v1.EnvVar{
+			Name:  clusterNameEnv,
+			Value: r.cnp(),
+		})
+	}
+
+	for _, container := range spec.Spec.Containers {
+		for _, env := range container.Env {
+			if env.Name == clusterNameEnv {
+				return
+			}
+		}
+		container.Env = append(container.Env, v1.EnvVar{
+			Name:  clusterNameEnv,
+			Value: r.cnp(),
+		})
+	}
 }

@@ -26,8 +26,8 @@ func Test_templatesLoader_handleZipFile(t *testing.T) {
 				Dir: "./",
 			},
 			args: args{
-				path:   "./app_version.zip",
-				appVer: "app_version",
+				path:   "./app_v1.0.1.1.zip",
+				appVer: "app_v1.0.1.1",
 			},
 			wantErr: false,
 		},
@@ -64,8 +64,8 @@ func Test_templatesLoader_handleTarGzFile(t *testing.T) {
 				Dir: "./",
 			},
 			args: args{
-				path:   "./app_version.tar.gz",
-				appVer: "app_version",
+				path:   "./app_v1.0.2.tar.gz",
+				appVer: "app_v1.0.2",
 			},
 			wantErr: false,
 		},
@@ -75,8 +75,8 @@ func Test_templatesLoader_handleTarGzFile(t *testing.T) {
 				Dir: "./",
 			},
 			args: args{
-				path:   "./app_version.tgz",
-				appVer: "app_version",
+				path:   "./app_v1.0.0.tgz",
+				appVer: "app_v1.0.0",
 			},
 			wantErr: false,
 		},

@@ -49015,8 +49015,6 @@ spec:
                       - name
                       type: object
                   required:
-                  - name
-                  - namespace
                   - template
                   type: object
                 type: object

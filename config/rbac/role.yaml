@@ -59,6 +59,32 @@ rules:
 - apiGroups:
   - udmire.cn
   resources:
+  - capsule
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - udmire.cn
+  resources:
+  - capsule/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - udmire.cn
+  resources:
+  - capsule/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - udmire.cn
+  resources:
   - exporters
   verbs:
   - create

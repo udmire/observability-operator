@@ -5,6 +5,7 @@ resources:
 - bases/udmire.cn_agents.yaml
 - bases/udmire.cn_exporters.yaml
 - bases/udmire.cn_apps.yaml
+- bases/udmire.cn_capsules.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patches:

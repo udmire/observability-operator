@@ -11,7 +11,7 @@ import (
 	rbac_v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	"github.com/udmire/observability-operator/pkg/apps/templates/template"
+	"github.com/udmire/observability-operator/pkg/templates/template"
 )
 
 type Builder interface {
@@ -107,7 +107,7 @@ func (b *templateBuilder) Build() *AppManifests {
 }
 
 func (b *templateBuilder) BuildComp(template *template.WorkloadTemplate) *CompManifests {
-	manifests := &CompManifests{}
+	manifests := &CompManifests{Name: template.Name}
 	for _, tempFile := range template.TemplateFiles {
 		resType, _ := recognize(tempFile)
 		var err error

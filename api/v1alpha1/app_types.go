@@ -11,8 +11,8 @@ import (
 )
 
 type AppSpec struct {
-	Name      string   `json:"name"`
-	Namespace string   `json:"namespace"`
+	Name      string   `json:"name,omitempty"`
+	Namespace string   `json:"namespace,omitempty"`
 	Template  Template `json:"template"`
 
 	CommonSpec `json:",inline"`

@@ -10,3 +10,14 @@ const (
 
 	DefaultManagedByValue = "observability-operator"
 )
+
+var SelectorIgnoredLabels = []string{ManagedByLabel, VersionLabel, PartOfLabel}
+
+func ShouldIgnoredInSelector(key string) bool {
+	for _, v := range SelectorIgnoredLabels {
+		if v == key {
+			return true
+		}
+	}
+	return false
+}

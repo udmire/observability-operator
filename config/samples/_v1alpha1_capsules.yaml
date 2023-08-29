@@ -1,0 +1,12 @@
+apiVersion: udmire.cn/v1alpha1
+kind: Capsule
+metadata:
+  labels:
+    app.kubernetes.io/name: capsule
+    app.kubernetes.io/instance: capsule-sample
+    app.kubernetes.io/part-of: observability-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: observability-operator
+  name: capsule-sample
+spec:
+  # TODO(user): Add fields here

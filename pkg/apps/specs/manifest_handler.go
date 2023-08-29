@@ -8,10 +8,11 @@ import (
 
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/manifest"
+	"github.com/udmire/observability-operator/pkg/utils"
 )
 
-func mergeServiceAccount(manifest *core_v1.ServiceAccount, serviceAccount *v1alpha1.ServiceAccountSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeServiceAccount(manifest *core_v1.ServiceAccount, serviceAccount *v1alpha1.ServiceAccountSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if serviceAccount == nil {
 		return
@@ -30,8 +31,8 @@ func mergeServiceAccount(manifest *core_v1.ServiceAccount, serviceAccount *v1alp
 	}
 }
 
-func mergeClusterRole(manifest *rbac_v1.ClusterRole, clusterRole *v1alpha1.ClusterRoleSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeClusterRole(manifest *rbac_v1.ClusterRole, clusterRole *v1alpha1.ClusterRoleSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if clusterRole == nil {
 		return
@@ -46,8 +47,10 @@ func mergeClusterRole(manifest *rbac_v1.ClusterRole, clusterRole *v1alpha1.Clust
 	}
 }
 
-func mergeClusterRoleBinding(manifest *rbac_v1.ClusterRoleBinding, clusterRoleBinding *v1alpha1.ClusterRoleBindingSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeClusterRoleBinding(manifest *rbac_v1.ClusterRoleBinding, clusterRoleBinding *v1alpha1.ClusterRoleBindingSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+
+	manifest.Subjects = updateSubjectsNamespace(manifest.Subjects, ns)
 
 	if clusterRoleBinding == nil {
 		return
@@ -62,8 +65,8 @@ func mergeClusterRoleBinding(manifest *rbac_v1.ClusterRoleBinding, clusterRoleBi
 	}
 }
 
-func mergeRole(manifest *rbac_v1.Role, role *v1alpha1.RoleSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeRole(manifest *rbac_v1.Role, role *v1alpha1.RoleSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if role == nil {
 		return
@@ -74,8 +77,9 @@ func mergeRole(manifest *rbac_v1.Role, role *v1alpha1.RoleSpec, labels map[strin
 	}
 }
 
-func mergeRoleBinding(manifest *rbac_v1.RoleBinding, roleBinding *v1alpha1.RoleBindingSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeRoleBinding(manifest *rbac_v1.RoleBinding, roleBinding *v1alpha1.RoleBindingSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	manifest.Subjects = updateSubjectsNamespace(manifest.Subjects, ns)
 
 	if roleBinding == nil {
 		return
@@ -90,8 +94,8 @@ func mergeRoleBinding(manifest *rbac_v1.RoleBinding, roleBinding *v1alpha1.RoleB
 	}
 }
 
-func mergeIngress(manifest *networking_v1.Ingress, ingress *v1alpha1.IngressSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeIngress(manifest *networking_v1.Ingress, ingress *v1alpha1.IngressSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if ingress == nil {
 		return
@@ -114,7 +118,11 @@ func mergeIngress(manifest *networking_v1.Ingress, ingress *v1alpha1.IngressSpec
 	}
 }
 
-func configMapsCustom(manifest *manifest.Manifests, configmaps map[string]*v1alpha1.ConfigMapSpec, namespace string, labels map[string]string) {
+func configMapsCustom(manifest *manifest.Manifests, configmaps map[string]*v1alpha1.ConfigMapSpec, ns string, labels map[string]string) {
+	for _, cm := range manifest.ConfigMaps {
+		mergeConfigMap(cm, nil, ns, labels)
+	}
+
 	if len(configmaps) < 1 {
 		return
 	}
@@ -122,20 +130,20 @@ func configMapsCustom(manifest *manifest.Manifests, configmaps map[string]*v1alp
 	merged := make(map[string]string)
 	for _, cm := range manifest.ConfigMaps {
 		if configmap, ok := configmaps[cm.Name]; ok {
-			mergeConfigMap(cm, configmap, labels)
+			mergeConfigMap(cm, configmap, ns, labels)
 			merged[cm.Name] = ""
 		}
 		continue
 	}
 
 	for name, cm := range configmaps {
-		if _, ok := merged[name]; !ok {
+		if _, ok := merged[name]; ok {
 			continue
 		}
 		manifest.ConfigMaps = append(manifest.ConfigMaps, &core_v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: namespace,
+				Namespace: ns,
 				Labels:    labels,
 			},
 			Data: cm.Data,
@@ -143,8 +151,8 @@ func configMapsCustom(manifest *manifest.Manifests, configmaps map[string]*v1alp
 	}
 }
 
-func mergeConfigMap(manifest *core_v1.ConfigMap, configmap *v1alpha1.ConfigMapSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeConfigMap(manifest *core_v1.ConfigMap, configmap *v1alpha1.ConfigMapSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if configmap == nil {
 		return
@@ -161,7 +169,11 @@ func mergeConfigMap(manifest *core_v1.ConfigMap, configmap *v1alpha1.ConfigMapSp
 	manifest.Data = configmap.Data
 }
 
-func secretsCustom(manifest *manifest.Manifests, secrets map[string]*v1alpha1.SecretSpec, namespace string, labels map[string]string) {
+func secretsCustom(manifest *manifest.Manifests, secrets map[string]*v1alpha1.SecretSpec, ns string, labels map[string]string) {
+	for _, sec := range manifest.Secrets {
+		mergeSecret(sec, nil, ns, labels)
+	}
+
 	if len(secrets) < 1 {
 		return
 	}
@@ -169,20 +181,20 @@ func secretsCustom(manifest *manifest.Manifests, secrets map[string]*v1alpha1.Se
 	merged := make(map[string]string)
 	for _, sec := range manifest.Secrets {
 		if secret, ok := secrets[sec.Name]; ok {
-			mergeSecret(sec, secret, labels)
+			mergeSecret(sec, secret, ns, labels)
 			merged[sec.Name] = ""
 		}
 		continue
 	}
 
 	for name, sec := range secrets {
-		if _, ok := merged[name]; !ok {
+		if _, ok := merged[name]; ok {
 			continue
 		}
 		manifest.Secrets = append(manifest.Secrets, &core_v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: namespace,
+				Namespace: ns,
 				Labels:    labels,
 			},
 			StringData: sec.StringData,
@@ -190,8 +202,8 @@ func secretsCustom(manifest *manifest.Manifests, secrets map[string]*v1alpha1.Se
 	}
 }
 
-func mergeSecret(manifest *core_v1.Secret, secret *v1alpha1.SecretSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeSecret(manifest *core_v1.Secret, secret *v1alpha1.SecretSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if secret == nil {
 		return
@@ -208,7 +220,11 @@ func mergeSecret(manifest *core_v1.Secret, secret *v1alpha1.SecretSpec, labels m
 	manifest.StringData = secret.StringData
 }
 
-func servicesCustom(manifest *manifest.Manifests, services map[string]*v1alpha1.ServiceSpec, namespace string, labels map[string]string) {
+func servicesCustom(manifest *manifest.Manifests, services map[string]*v1alpha1.ServiceSpec, ns string, labels map[string]string) {
+	for _, svc := range manifest.Services {
+		mergeService(svc, nil, ns, labels)
+	}
+
 	if len(services) < 1 {
 		return
 	}
@@ -216,20 +232,20 @@ func servicesCustom(manifest *manifest.Manifests, services map[string]*v1alpha1.
 	merged := make(map[string]string)
 	for _, srv := range manifest.Services {
 		if service, ok := services[srv.Name]; ok {
-			mergeService(srv, service, labels)
+			mergeService(srv, service, ns, labels)
 			merged[srv.Name] = ""
 		}
 		continue
 	}
 
 	for name, srv := range services {
-		if _, ok := merged[name]; !ok {
+		if _, ok := merged[name]; ok {
 			continue
 		}
 		manifest.Services = append(manifest.Services, &core_v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: namespace,
+				Namespace: ns,
 				Labels:    labels,
 			},
 			Spec: core_v1.ServiceSpec{
@@ -241,8 +257,10 @@ func servicesCustom(manifest *manifest.Manifests, services map[string]*v1alpha1.
 	}
 }
 
-func mergeService(manifest *core_v1.Service, service *v1alpha1.ServiceSpec, labels map[string]string) {
-	mergeObjectMeta(&manifest.ObjectMeta, labels)
+func mergeService(manifest *core_v1.Service, service *v1alpha1.ServiceSpec, ns string, labels map[string]string) {
+	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+
+	mergeSelectorLabels(manifest.Spec.Selector, labels)
 
 	if service == nil {
 		return
@@ -259,9 +277,13 @@ func mergeService(manifest *core_v1.Service, service *v1alpha1.ServiceSpec, labe
 	}
 }
 
-func mergeObjectMeta(meta *metav1.ObjectMeta, labels map[string]string) {
+func mergeObjectMeta(meta *metav1.ObjectMeta, ns string, labels map[string]string) {
 	if len(labels) == 0 {
 		return
+	}
+
+	if len(ns) > 0 {
+		meta.Namespace = ns
 	}
 
 	for key, value := range labels {
@@ -270,4 +292,39 @@ func mergeObjectMeta(meta *metav1.ObjectMeta, labels map[string]string) {
 		}
 		meta.Labels[key] = value
 	}
+}
+
+func mergePodTemplateObjectMeta(meta *metav1.ObjectMeta, labels map[string]string) {
+	mergeSelectorLabels(meta.Labels, labels)
+}
+
+func mergeSelectorLabels(meta map[string]string, labels map[string]string) {
+	if len(labels) == 0 {
+		return
+	}
+
+	for key, value := range labels {
+		if _, ok := meta[key]; ok {
+			continue
+		}
+		if utils.ShouldIgnoredInSelector(key) {
+			continue
+		}
+		meta[key] = value
+	}
+}
+
+func updateSubjectsNamespace(subjects []rbac_v1.Subject, ns string) (result []rbac_v1.Subject) {
+	if len(ns) > 0 {
+		for _, sub := range subjects {
+			result = append(result, rbac_v1.Subject{
+				Kind:      sub.Kind,
+				APIGroup:  sub.APIGroup,
+				Name:      sub.Name,
+				Namespace: ns,
+			})
+		}
+		return result
+	}
+	return subjects
 }

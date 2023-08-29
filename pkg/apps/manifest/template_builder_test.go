@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/udmire/observability-operator/pkg/apps/templates/template"
+	"github.com/udmire/observability-operator/pkg/templates/template"
 )
 
 func Test_recognize(t *testing.T) {

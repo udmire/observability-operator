@@ -1,0 +1,31 @@
+# permissions for end users to edit capsules.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: capsules-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: observability-operator
+    app.kubernetes.io/part-of: observability-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: capsules-editor-role
+rules:
+- apiGroups:
+  - udmire.cn
+  resources:
+  - capsule
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - udmire.cn
+  resources:
+  - capsule/status
+  verbs:
+  - get

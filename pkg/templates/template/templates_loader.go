@@ -198,7 +198,7 @@ func (l *templatesLoader) loadTemplateWithFolder(appVer, tempDir string) (app *A
 		}
 
 		if entry.IsDir() {
-			if path == appVer {
+			if path == appVer || path == rootPath {
 				return nil
 			}
 
@@ -218,7 +218,7 @@ func (l *templatesLoader) loadTemplateWithFolder(appVer, tempDir string) (app *A
 
 			base := filepath.Dir(path)
 			var templateBase *TemplateBase
-			if base == appVer {
+			if base == appVer || base == rootPath {
 				templateBase = &app.TemplateBase
 			} else {
 				templateBase = &app.Workloads[base].TemplateBase

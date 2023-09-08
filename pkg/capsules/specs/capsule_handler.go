@@ -62,16 +62,18 @@ func (h *capsuleHandler) customerizeApp(manifest *manifest.CapsuleManifests, app
 	instanceLabels := utils.AppInstanceLabels(app.Name, app.Template.Name, app.Template.Version)
 	namespace := app.Namespace
 
-	h.customerize(&manifest.Manifest, app.CapsuleCommonSpec, app.Name, namespace, instanceLabels)
+	prefix := fmt.Sprintf("%s-", app.Name)
+
+	h.customerize(&manifest.Manifest, app.CapsuleCommonSpec, prefix, app.Name, namespace, instanceLabels)
 
 	if len(manifest.CompsManifests) > 0 {
 		for _, component := range manifest.CompsManifests {
 			componentName := component.Name
 			var err error
 			if compSpec, exists := app.Components[componentName]; exists {
-				err = h.customerizeComponent(component, compSpec, app.Name, app.Template.Name, app.Template.Version, componentName, namespace)
+				err = h.customerizeComponent(component, compSpec, app.Template, prefix, app.Name, componentName, namespace)
 			} else {
-				err = h.customerizeComponent(component, v1alpha1.CapsuleCommonSpec{}, app.Name, app.Template.Name, app.Template.Version, componentName, namespace)
+				err = h.customerizeComponent(component, v1alpha1.CapsuleCommonSpec{}, app.Template, prefix, app.Name, componentName, namespace)
 			}
 
 			if err != nil {
@@ -84,21 +86,22 @@ func (h *capsuleHandler) customerizeApp(manifest *manifest.CapsuleManifests, app
 	return manifest, nil
 }
 
-func (h *capsuleHandler) customerizeComponent(manifest *manifest.CompManifests, spec v1alpha1.CapsuleCommonSpec, instance, template, version, component, namespace string) error {
-	compLabels := utils.ComponentLabels(instance, template, version, component)
+func (h *capsuleHandler) customerizeComponent(manifest *manifest.CompManifests, spec v1alpha1.CapsuleCommonSpec, template v1alpha1.Template, prefix, instance, component, namespace string) error {
+	compLabels := utils.ComponentLabels(instance, template.Name, template.Version, component)
 
-	return h.customerize(&manifest.Manifest, spec, component, namespace, compLabels)
+	return h.customerize(&manifest.Manifest, spec, prefix, component, namespace, compLabels)
 }
 
-func (h *capsuleHandler) customerize(manifest *manifest.Manifest, app v1alpha1.CapsuleCommonSpec, name, namespace string, labels map[string]string) error {
-	configMapsCustom(manifest, app.ConfigMaps, namespace, labels)
-	secretsCustom(manifest, app.Secrets, namespace, labels)
+func (h *capsuleHandler) customerize(manifest *manifest.Manifest, app v1alpha1.CapsuleCommonSpec, prefix, name, namespace string, labels map[string]string) error {
+	configMapsCustom(manifest, app.ConfigMaps, prefix, namespace, labels)
+	secretsCustom(manifest, app.Secrets, prefix, namespace, labels)
 
 	return nil
 }
 
-func configMapsCustom(manifest *manifest.Manifest, configmaps map[string]*v1alpha1.ConfigMapSpec, ns string, labels map[string]string) {
+func configMapsCustom(manifest *manifest.Manifest, configmaps map[string]*v1alpha1.ConfigMapSpec, prefix, ns string, labels map[string]string) {
 	for _, cm := range manifest.ConfigMaps {
+		updateNameWithPrefix(prefix, &cm.ObjectMeta)
 		mergeConfigMap(cm, nil, ns, labels)
 	}
 
@@ -106,16 +109,21 @@ func configMapsCustom(manifest *manifest.Manifest, configmaps map[string]*v1alph
 		return
 	}
 
+	normalized := make(map[string]*v1alpha1.ConfigMapSpec, len(configmaps))
+	for name, configmap := range configmaps {
+		normalized[fmt.Sprintf("%s%s", prefix, name)] = configmap
+	}
+
 	merged := make(map[string]string)
 	for _, cm := range manifest.ConfigMaps {
-		if configmap, ok := configmaps[cm.Name]; ok {
+		if configmap, ok := normalized[cm.Name]; ok {
 			mergeConfigMap(cm, configmap, ns, labels)
 			merged[cm.Name] = ""
 		}
 		continue
 	}
 
-	for name, cm := range configmaps {
+	for name, cm := range normalized {
 		if _, ok := merged[name]; ok {
 			continue
 		}
@@ -148,8 +156,9 @@ func mergeConfigMap(manifest *core_v1.ConfigMap, configmap *v1alpha1.ConfigMapSp
 	manifest.Data = configmap.Data
 }
 
-func secretsCustom(manifest *manifest.Manifest, secrets map[string]*v1alpha1.SecretSpec, ns string, labels map[string]string) {
+func secretsCustom(manifest *manifest.Manifest, secrets map[string]*v1alpha1.SecretSpec, prefix, ns string, labels map[string]string) {
 	for _, sec := range manifest.Secrets {
+		updateNameWithPrefix(prefix, &sec.ObjectMeta)
 		mergeSecret(sec, nil, ns, labels)
 	}
 
@@ -157,16 +166,21 @@ func secretsCustom(manifest *manifest.Manifest, secrets map[string]*v1alpha1.Sec
 		return
 	}
 
+	normalized := make(map[string]*v1alpha1.SecretSpec, len(secrets))
+	for name, configmap := range secrets {
+		normalized[fmt.Sprintf("%s%s", prefix, name)] = configmap
+	}
+
 	merged := make(map[string]string)
 	for _, sec := range manifest.Secrets {
-		if secret, ok := secrets[sec.Name]; ok {
+		if secret, ok := normalized[sec.Name]; ok {
 			mergeSecret(sec, secret, ns, labels)
 			merged[sec.Name] = ""
 		}
 		continue
 	}
 
-	for name, sec := range secrets {
+	for name, sec := range normalized {
 		if _, ok := merged[name]; ok {
 			continue
 		}
@@ -214,4 +228,8 @@ func mergeObjectMeta(meta *metav1.ObjectMeta, ns string, labels map[string]strin
 		}
 		meta.Labels[key] = value
 	}
+}
+
+func updateNameWithPrefix(prefix string, meta *metav1.ObjectMeta) {
+	meta.Name = fmt.Sprintf("%s%s", prefix, meta.Name)
 }

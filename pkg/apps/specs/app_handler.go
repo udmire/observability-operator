@@ -61,19 +61,23 @@ func (h *appHandler) Selector(app v1alpha1.AppSpec) labels.Selector {
 }
 
 func (h *appHandler) customerizeApp(manifest *manifest.AppManifests, app v1alpha1.AppSpec) (*manifest.AppManifests, error) {
+	prefix := ""
+	if !app.Singleton {
+		prefix = fmt.Sprintf("%s-", app.Name)
+	}
 	instanceLabels := utils.AppInstanceLabels(app.Name, app.Template.Name, app.Template.Version)
 	namespace := app.Namespace
 
-	h.customerize(&manifest.Manifests, app.CommonSpec, app.Name, namespace, instanceLabels)
+	h.customerize(&manifest.Manifests, app.CommonSpec, prefix, app.Name, namespace, instanceLabels)
 
 	if len(manifest.CompsMenifests) > 0 {
 		for _, component := range manifest.CompsMenifests {
 			componentName := component.Name
 			var err error
 			if compSpec, exists := app.Components[componentName]; exists {
-				err = h.customerizeComponent(component, compSpec, app.Name, app.Template.Name, app.Template.Version, componentName, namespace)
+				err = h.customerizeComponent(component, compSpec, app.Template, prefix, app.Name, componentName, namespace)
 			} else {
-				err = h.customerizeComponent(component, v1alpha1.ComponentSpec{}, app.Name, app.Template.Name, app.Template.Version, componentName, namespace)
+				err = h.customerizeComponent(component, v1alpha1.ComponentSpec{}, app.Template, prefix, app.Name, componentName, namespace)
 			}
 
 			if err != nil {
@@ -86,29 +90,29 @@ func (h *appHandler) customerizeApp(manifest *manifest.AppManifests, app v1alpha
 	return manifest, nil
 }
 
-func (h *appHandler) customerizeComponent(manifest *manifest.CompManifests, spec v1alpha1.ComponentSpec, instance, template, version, component, namespace string) error {
-	compLabels := utils.ComponentLabels(instance, template, version, component)
+func (h *appHandler) customerizeComponent(manifest *manifest.CompManifests, spec v1alpha1.ComponentSpec, template v1alpha1.Template, prefix, instance, component, namespace string) error {
+	compLabels := utils.ComponentLabels(instance, template.Name, template.Version, component)
 
-	h.customerize(&manifest.Manifests, spec.CommonSpec, component, namespace, compLabels)
+	h.customerize(&manifest.Manifests, spec.CommonSpec, prefix, component, namespace, compLabels)
 
 	var err error
 	if manifest.Deployment != nil {
-		err = mergeDeployment(manifest.Deployment, spec.Deployment, namespace, compLabels)
+		err = mergeDeployment(manifest.Deployment, spec.Deployment, prefix, namespace, compLabels)
 	}
 	if manifest.DaemonSet != nil {
-		err = mergeDaemonset(manifest.DaemonSet, spec.DaemonSet, namespace, compLabels)
+		err = mergeDaemonset(manifest.DaemonSet, spec.DaemonSet, prefix, namespace, compLabels)
 	}
 	if manifest.StatefulSet != nil {
-		err = mergeStatefulSet(manifest.StatefulSet, spec.StatefulSet, namespace, compLabels)
+		err = mergeStatefulSet(manifest.StatefulSet, spec.StatefulSet, prefix, namespace, compLabels)
 	}
 	if manifest.ReplicaSet != nil {
-		err = mergeReplicaSet(manifest.ReplicaSet, spec.ReplicaSet, namespace, compLabels)
+		err = mergeReplicaSet(manifest.ReplicaSet, spec.ReplicaSet, prefix, namespace, compLabels)
 	}
 	if manifest.Job != nil {
-		err = mergeJob(manifest.Job, spec.Job, namespace, compLabels)
+		err = mergeJob(manifest.Job, spec.Job, prefix, namespace, compLabels)
 	}
 	if manifest.CronJob != nil {
-		err = mergeCronJob(manifest.CronJob, spec.CronJob, namespace, compLabels)
+		err = mergeCronJob(manifest.CronJob, spec.CronJob, prefix, namespace, compLabels)
 	}
 
 	return err
@@ -125,17 +129,17 @@ func (h *appHandler) getTemplate(name, version string) *template.AppTemplate {
 	return template
 }
 
-func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.CommonSpec, name, namespace string, labels map[string]string) error {
-	configMapsCustom(manifest, app.ConfigMaps, namespace, labels)
-	secretsCustom(manifest, app.Secrets, namespace, labels)
-	servicesCustom(manifest, app.Services, namespace, labels)
+func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.CommonSpec, prefix, name, namespace string, labels map[string]string) error {
+	configMapsCustom(manifest, app.ConfigMaps, prefix, namespace, labels)
+	secretsCustom(manifest, app.Secrets, prefix, namespace, labels)
+	servicesCustom(manifest, app.Services, prefix, namespace, labels)
 
 	if manifest.ServiceAccount != nil {
-		mergeServiceAccount(manifest.ServiceAccount, app.ServiceAccount, namespace, labels)
+		mergeServiceAccount(manifest.ServiceAccount, app.ServiceAccount, prefix, namespace, labels)
 	} else if app.ServiceAccount != nil {
 		manifest.ServiceAccount = &core_v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      fmt.Sprintf("%s-%s", prefix, name),
 				Namespace: namespace,
 				Labels:    labels,
 			},
@@ -146,11 +150,11 @@ func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.Comm
 	}
 
 	if manifest.ClusterRole != nil {
-		mergeClusterRole(manifest.ClusterRole, app.ClusterRole, namespace, labels)
+		mergeClusterRole(manifest.ClusterRole, app.ClusterRole, prefix, namespace, labels)
 	} else if app.ClusterRole != nil {
 		manifest.ClusterRole = &rbac_v1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      fmt.Sprintf("%s-%s", prefix, name),
 				Namespace: namespace,
 				Labels:    labels,
 			},
@@ -160,11 +164,11 @@ func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.Comm
 	}
 
 	if manifest.ClusterRoleBinding != nil {
-		mergeClusterRoleBinding(manifest.ClusterRoleBinding, app.ClusterRoleBinding, namespace, labels)
+		mergeClusterRoleBinding(manifest.ClusterRoleBinding, app.ClusterRoleBinding, prefix, namespace, labels)
 	} else if app.ClusterRoleBinding != nil {
 		manifest.ClusterRoleBinding = &rbac_v1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      fmt.Sprintf("%s-%s", prefix, name),
 				Namespace: namespace,
 				Labels:    labels,
 			},
@@ -174,11 +178,11 @@ func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.Comm
 	}
 
 	if manifest.Role != nil {
-		mergeRole(manifest.Role, app.Role, namespace, labels)
+		mergeRole(manifest.Role, app.Role, prefix, namespace, labels)
 	} else if app.Role != nil {
 		manifest.Role = &rbac_v1.Role{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      fmt.Sprintf("%s-%s", prefix, name),
 				Namespace: namespace,
 				Labels:    labels,
 			},
@@ -187,11 +191,11 @@ func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.Comm
 	}
 
 	if manifest.RoleBinding != nil {
-		mergeRoleBinding(manifest.RoleBinding, app.RoleBinding, namespace, labels)
+		mergeRoleBinding(manifest.RoleBinding, app.RoleBinding, prefix, namespace, labels)
 	} else if app.RoleBinding != nil {
 		manifest.RoleBinding = &rbac_v1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      fmt.Sprintf("%s-%s", prefix, name),
 				Namespace: namespace,
 				Labels:    labels,
 			},
@@ -201,11 +205,11 @@ func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.Comm
 	}
 
 	if manifest.Ingress != nil {
-		mergeIngress(manifest.Ingress, app.Ingress, namespace, labels)
+		mergeIngress(manifest.Ingress, app.Ingress, prefix, namespace, labels)
 	} else if app.Ingress != nil {
 		manifest.Ingress = &networking_v1.Ingress{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      fmt.Sprintf("%s-%s", prefix, name),
 				Namespace: namespace,
 				Labels:    labels,
 			},

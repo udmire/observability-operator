@@ -116,4 +116,5 @@ func (r *CapsulesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *CapsulesReconciler) normalize(instance *v1alpha1.Capsule) {
 	instance.Spec.Namespace = instance.Namespace
+	instance.Spec.Name = instance.Name
 }

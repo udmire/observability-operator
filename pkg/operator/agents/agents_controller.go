@@ -34,33 +34,32 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
+	"github.com/udmire/observability-operator/pkg/operator/base"
 	"github.com/udmire/observability-operator/pkg/operator/manager"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 )
 
 // AgentsReconciler reconciles a Agents object
 type AgentsReconciler struct {
-	*services.BasicService
-
-	client.Client
-	Scheme *runtime.Scheme
+	base.BaseReconciler
 
 	mgr ctrl.Manager
 	cnp manager.ClusterNameProvider
 
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
-	logger        log.Logger
 }
 
 func New(client client.Client, schema *runtime.Scheme, tp provider.TemplateProvider, logger log.Logger) *AgentsReconciler {
 	reconciler := &AgentsReconciler{
-		Client: client,
-		Scheme: schema,
+		BaseReconciler: base.BaseReconciler{
+			Client: client,
+			Scheme: schema,
+			Logger: logger,
+		},
 
 		handler:       specs.New(tp, logger),
 		appReconciler: reconcile.New(logger, client),
-		logger:        logger,
 	}
 	reconciler.BasicService = services.NewIdleService(func(serviceContext context.Context) error {
 		return reconciler.SetupWithManager(reconciler.mgr)
@@ -90,15 +89,15 @@ func (r *AgentsReconciler) SetClusterNameProvider(cnp manager.ClusterNameProvide
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.4/pkg/reconcile
 func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	level.Info(r.logger).Log("msg", "reconciling agent")
-	defer level.Info(r.logger).Log("msg", "done reconciling agent")
+	level.Info(r.Logger).Log("msg", "reconciling agent")
+	defer level.Info(r.Logger).Log("msg", "done reconciling agent")
 
 	instance := &v1alpha1.Agents{}
 	if err := r.Get(ctx, req.NamespacedName, instance); apierrors.IsNotFound(err) {
-		level.Error(r.logger).Log("msg", "detected deleted Agents", "err", err)
+		level.Error(r.Logger).Log("msg", "detected deleted Agents", "err", err)
 		return ctrl.Result{}, nil
 	} else if err != nil {
-		level.Error(r.logger).Log("msg", "unable to get Agents", "err", err)
+		level.Error(r.Logger).Log("msg", "unable to get Agents", "err", err)
 		return ctrl.Result{}, nil
 	}
 
@@ -142,7 +141,13 @@ func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	manifest, err := r.handler.Handle(instance.Spec.AppSpec)
 	if err != nil {
-		level.Error(r.logger).Log("msg", "failed to generate manifests", "instance", instance.Name, "err", err)
+		level.Error(r.Logger).Log("msg", "failed to generate manifests", "instance", instance.Name, "err", err)
+		return ctrl.Result{}, err
+	}
+
+	err = r.ProcessDependencies(owner, instance.Namespace, instance.Spec.Template, instance.Spec.Singleton, instance.Spec.Dependencies)
+	if err != nil {
+		level.Error(r.Logger).Log("msg", "failed to create dependencies", "instance", instance.Name, "err", err)
 		return ctrl.Result{}, err
 	}
 
@@ -150,7 +155,7 @@ func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	err = r.appReconciler.Reconcile(owner, "agents", instance.Name, manifest)
 	if err != nil {
-		level.Error(r.logger).Log("msg", "failed to apply manifests", "instance", instance.Name, "err", err)
+		level.Error(r.Logger).Log("msg", "failed to apply manifests", "instance", instance.Name, "err", err)
 		return ctrl.Result{}, err
 	}
 
@@ -161,6 +166,9 @@ func (r *AgentsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *AgentsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Agents{}).
+		Owns(&v1alpha1.Exporters{}).
+		Owns(&v1alpha1.Apps{}).
+		Owns(&v1alpha1.Capsule{}).
 		Complete(r)
 }
 
@@ -176,6 +184,7 @@ func (r *AgentsReconciler) normalizeInstance(instance *v1alpha1.Agents) {
 			r.updatePodTemplateEnv(comp.Deployment.Template)
 		}
 		if comp.StatefulSet != nil {
+			r.updatePodTemplateEnv(comp.StatefulSet.Template)
 		}
 	}
 }

@@ -23,12 +23,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
-	app_v1 "k8s.io/api/apps/v1"
-	autoscaling_v1 "k8s.io/api/autoscaling/v1"
-	batch_v1 "k8s.io/api/batch/v1"
-	core_v1 "k8s.io/api/core/v1"
-	networking_v1 "k8s.io/api/networking/v1"
-	rbac_v1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,16 +34,14 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
+	"github.com/udmire/observability-operator/pkg/operator/base"
 	"github.com/udmire/observability-operator/pkg/operator/manager"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 )
 
 // ExportersReconciler reconciles a Exporters object
 type ExportersReconciler struct {
-	*services.BasicService
-
-	client.Client
-	Scheme *runtime.Scheme
+	base.BaseReconciler
 
 	cfg Config
 
@@ -58,18 +50,19 @@ type ExportersReconciler struct {
 
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
-	logger        log.Logger
 }
 
 func New(client client.Client, schema *runtime.Scheme, config Config, tp provider.TemplateProvider, logger log.Logger) *ExportersReconciler {
 	reconciler := &ExportersReconciler{
-		Client: client,
-		Scheme: schema,
-		cfg:    config,
+		BaseReconciler: base.BaseReconciler{
+			Client: client,
+			Scheme: schema,
+			Logger: logger,
+		},
+		cfg: config,
 
 		handler:       specs.New(tp, logger),
 		appReconciler: reconcile.New(logger, client),
-		logger:        logger,
 	}
 	reconciler.BasicService = services.NewIdleService(func(serviceContext context.Context) error {
 		return reconciler.SetupWithManager(reconciler.mgr)
@@ -99,15 +92,15 @@ func (r *ExportersReconciler) SetClusterNameProvider(cnp manager.ClusterNameProv
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.4/pkg/reconcile
 func (r *ExportersReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	level.Info(r.logger).Log("msg", "reconciling exporters")
-	defer level.Info(r.logger).Log("msg", "done reconciling exporters")
+	level.Info(r.Logger).Log("msg", "reconciling exporters")
+	defer level.Info(r.Logger).Log("msg", "done reconciling exporters")
 
 	instance := &v1alpha1.Exporters{}
 	if err := r.Get(ctx, req.NamespacedName, instance); apierrors.IsNotFound(err) {
-		level.Error(r.logger).Log("msg", "detected deleted Exporters", "err", err)
+		level.Error(r.Logger).Log("msg", "detected deleted Exporters", "err", err)
 		return ctrl.Result{}, nil
 	} else if err != nil {
-		level.Error(r.logger).Log("msg", "unable to get Exporters", "err", err)
+		level.Error(r.Logger).Log("msg", "unable to get Exporters", "err", err)
 		return ctrl.Result{}, nil
 	}
 
@@ -158,20 +151,25 @@ func (r *ExportersReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		go func(app v1alpha1.AppSpec) {
 			defer wg.Done()
 			semaphore <- struct{}{}
+			defer func() {
+				<-semaphore
+			}()
 
 			manifest, err := r.handler.Handle(app)
 			if err != nil {
-				level.Error(r.logger).Log("msg", "failed to generate manifests", "instance", instance.Name, "exporter", app.Name, "err", err)
-				<-semaphore
+				level.Error(r.Logger).Log("msg", "failed to generate manifests", "instance", instance.Name, "exporter", app.Name, "err", err)
+				return
+			}
+
+			if err := r.ProcessDependencies(owner, instance.Namespace, app.Template, app.Singleton, app.Dependencies); err != nil {
+				level.Error(r.Logger).Log("msg", "failed to create dependencies", "instance", instance.Name, "exporter", app.Name, "err", err)
 				return
 			}
 
 			err = r.appReconciler.Reconcile(owner, "exporter", app.Name, manifest)
 			if err != nil {
-				level.Error(r.logger).Log("msg", "failed to apply manifests", "instance", instance.Name, "exporter", app.Name, "err", err)
+				level.Error(r.Logger).Log("msg", "failed to apply manifests", "instance", instance.Name, "exporter", app.Name, "err", err)
 			}
-
-			<-semaphore
 		}(exploy)
 	}
 	wg.Wait()
@@ -183,22 +181,9 @@ func (r *ExportersReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *ExportersReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Exporters{}).
-		Owns(&core_v1.ConfigMap{}).
-		Owns(&core_v1.Secret{}).
-		Owns(&core_v1.ServiceAccount{}).
-		Owns(&core_v1.Service{}).
-		Owns(&app_v1.Deployment{}).
-		Owns(&app_v1.DaemonSet{}).
-		Owns(&app_v1.StatefulSet{}).
-		Owns(&app_v1.ReplicaSet{}).
-		Owns(&batch_v1.Job{}).
-		Owns(&batch_v1.CronJob{}).
-		Owns(&networking_v1.Ingress{}).
-		Owns(&rbac_v1.ClusterRole{}).
-		Owns(&rbac_v1.ClusterRoleBinding{}).
-		Owns(&rbac_v1.RoleBinding{}).
-		Owns(&rbac_v1.Role{}).
-		Owns(&autoscaling_v1.HorizontalPodAutoscaler{}).
+		Owns(&v1alpha1.Exporters{}).
+		Owns(&v1alpha1.Apps{}).
+		Owns(&v1alpha1.Capsule{}).
 		Complete(r)
 }
 

@@ -14,9 +14,13 @@ type AppSpec struct {
 	Name      string   `json:"name,omitempty"`
 	Namespace string   `json:"namespace,omitempty"`
 	Template  Template `json:"template"`
+	Singleton bool     `json:"singleton,omitempty"`
 
 	CommonSpec `json:",inline"`
 	Components map[string]ComponentSpec `json:"components,omitempty"`
+
+	// App Dependencies, must be ready before AppSpec Applied.
+	Dependencies AppDepsSpec `json:"deps,omitempty"`
 }
 
 type Template struct {

@@ -1,6 +1,8 @@
 package specs
 
 import (
+	"fmt"
+
 	core_v1 "k8s.io/api/core/v1"
 	networking_v1 "k8s.io/api/networking/v1"
 	rbac_v1 "k8s.io/api/rbac/v1"
@@ -11,7 +13,8 @@ import (
 	"github.com/udmire/observability-operator/pkg/utils"
 )
 
-func mergeServiceAccount(manifest *core_v1.ServiceAccount, serviceAccount *v1alpha1.ServiceAccountSpec, ns string, labels map[string]string) {
+func mergeServiceAccount(manifest *core_v1.ServiceAccount, serviceAccount *v1alpha1.ServiceAccountSpec, prefix, ns string, labels map[string]string) {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if serviceAccount == nil {
@@ -31,7 +34,8 @@ func mergeServiceAccount(manifest *core_v1.ServiceAccount, serviceAccount *v1alp
 	}
 }
 
-func mergeClusterRole(manifest *rbac_v1.ClusterRole, clusterRole *v1alpha1.ClusterRoleSpec, ns string, labels map[string]string) {
+func mergeClusterRole(manifest *rbac_v1.ClusterRole, clusterRole *v1alpha1.ClusterRoleSpec, prefix, ns string, labels map[string]string) {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if clusterRole == nil {
@@ -47,10 +51,12 @@ func mergeClusterRole(manifest *rbac_v1.ClusterRole, clusterRole *v1alpha1.Clust
 	}
 }
 
-func mergeClusterRoleBinding(manifest *rbac_v1.ClusterRoleBinding, clusterRoleBinding *v1alpha1.ClusterRoleBindingSpec, ns string, labels map[string]string) {
+func mergeClusterRoleBinding(manifest *rbac_v1.ClusterRoleBinding, clusterRoleBinding *v1alpha1.ClusterRoleBindingSpec, prefix, ns string, labels map[string]string) {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
-	manifest.Subjects = updateSubjectsNamespace(manifest.Subjects, ns)
+	manifest.Subjects = updateSubjects(manifest.Subjects, prefix, ns)
+	updateRoleRef(&manifest.RoleRef, prefix)
 
 	if clusterRoleBinding == nil {
 		return
@@ -58,14 +64,17 @@ func mergeClusterRoleBinding(manifest *rbac_v1.ClusterRoleBinding, clusterRoleBi
 
 	if clusterRoleBinding.RoleRef != nil {
 		manifest.RoleRef = *clusterRoleBinding.RoleRef
+		updateRoleRef(&manifest.RoleRef, prefix)
 	}
 
 	if len(clusterRoleBinding.Subjects) > 0 {
 		manifest.Subjects = clusterRoleBinding.Subjects
+		manifest.Subjects = updateSubjects(manifest.Subjects, prefix, ns)
 	}
 }
 
-func mergeRole(manifest *rbac_v1.Role, role *v1alpha1.RoleSpec, ns string, labels map[string]string) {
+func mergeRole(manifest *rbac_v1.Role, role *v1alpha1.RoleSpec, prefix, ns string, labels map[string]string) {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
 
 	if role == nil {
@@ -77,9 +86,11 @@ func mergeRole(manifest *rbac_v1.Role, role *v1alpha1.RoleSpec, ns string, label
 	}
 }
 
-func mergeRoleBinding(manifest *rbac_v1.RoleBinding, roleBinding *v1alpha1.RoleBindingSpec, ns string, labels map[string]string) {
+func mergeRoleBinding(manifest *rbac_v1.RoleBinding, roleBinding *v1alpha1.RoleBindingSpec, prefix, ns string, labels map[string]string) {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
-	manifest.Subjects = updateSubjectsNamespace(manifest.Subjects, ns)
+	manifest.Subjects = updateSubjects(manifest.Subjects, prefix, ns)
+	updateRoleRef(&manifest.RoleRef, prefix)
 
 	if roleBinding == nil {
 		return
@@ -87,15 +98,22 @@ func mergeRoleBinding(manifest *rbac_v1.RoleBinding, roleBinding *v1alpha1.RoleB
 
 	if roleBinding.RoleRef != nil {
 		manifest.RoleRef = *roleBinding.RoleRef
+		updateRoleRef(&manifest.RoleRef, prefix)
 	}
 
 	if len(roleBinding.Subjects) > 0 {
 		manifest.Subjects = roleBinding.Subjects
+		manifest.Subjects = updateSubjects(manifest.Subjects, prefix, ns)
 	}
 }
 
-func mergeIngress(manifest *networking_v1.Ingress, ingress *v1alpha1.IngressSpec, ns string, labels map[string]string) {
+func mergeIngress(manifest *networking_v1.Ingress, ingress *v1alpha1.IngressSpec, prefix, ns string, labels map[string]string) {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	manifest.Spec.Rules = updateIngressRules(manifest.Spec.Rules, prefix)
+	if manifest.Spec.DefaultBackend != nil {
+		manifest.Spec.DefaultBackend.Service.Name = fmt.Sprintf("%s%s", prefix, manifest.Spec.DefaultBackend.Service.Name)
+	}
 
 	if ingress == nil {
 		return
@@ -107,6 +125,7 @@ func mergeIngress(manifest *networking_v1.Ingress, ingress *v1alpha1.IngressSpec
 
 	if ingress.DefaultBackend != nil {
 		manifest.Spec.DefaultBackend = ingress.DefaultBackend
+		manifest.Spec.DefaultBackend.Service.Name = fmt.Sprintf("%s%s", prefix, manifest.Spec.DefaultBackend.Service.Name)
 	}
 
 	if len(ingress.TLS) > 0 {
@@ -115,11 +134,13 @@ func mergeIngress(manifest *networking_v1.Ingress, ingress *v1alpha1.IngressSpec
 
 	if len(ingress.Rules) > 0 {
 		manifest.Spec.Rules = ingress.Rules
+		manifest.Spec.Rules = updateIngressRules(manifest.Spec.Rules, prefix)
 	}
 }
 
-func configMapsCustom(manifest *manifest.Manifests, configmaps map[string]*v1alpha1.ConfigMapSpec, ns string, labels map[string]string) {
+func configMapsCustom(manifest *manifest.Manifests, configmaps map[string]*v1alpha1.ConfigMapSpec, prefix, ns string, labels map[string]string) {
 	for _, cm := range manifest.ConfigMaps {
+		updateNameWithPrefix(prefix, &cm.ObjectMeta)
 		mergeConfigMap(cm, nil, ns, labels)
 	}
 
@@ -127,16 +148,21 @@ func configMapsCustom(manifest *manifest.Manifests, configmaps map[string]*v1alp
 		return
 	}
 
+	normalized := make(map[string]*v1alpha1.ConfigMapSpec, len(configmaps))
+	for name, configmap := range configmaps {
+		normalized[fmt.Sprintf("%s%s", prefix, name)] = configmap
+	}
+
 	merged := make(map[string]string)
 	for _, cm := range manifest.ConfigMaps {
-		if configmap, ok := configmaps[cm.Name]; ok {
+		if configmap, ok := normalized[cm.Name]; ok {
 			mergeConfigMap(cm, configmap, ns, labels)
 			merged[cm.Name] = ""
 		}
 		continue
 	}
 
-	for name, cm := range configmaps {
+	for name, cm := range normalized {
 		if _, ok := merged[name]; ok {
 			continue
 		}
@@ -169,8 +195,9 @@ func mergeConfigMap(manifest *core_v1.ConfigMap, configmap *v1alpha1.ConfigMapSp
 	manifest.Data = configmap.Data
 }
 
-func secretsCustom(manifest *manifest.Manifests, secrets map[string]*v1alpha1.SecretSpec, ns string, labels map[string]string) {
+func secretsCustom(manifest *manifest.Manifests, secrets map[string]*v1alpha1.SecretSpec, prefix, ns string, labels map[string]string) {
 	for _, sec := range manifest.Secrets {
+		updateNameWithPrefix(prefix, &sec.ObjectMeta)
 		mergeSecret(sec, nil, ns, labels)
 	}
 
@@ -178,16 +205,21 @@ func secretsCustom(manifest *manifest.Manifests, secrets map[string]*v1alpha1.Se
 		return
 	}
 
+	normalized := make(map[string]*v1alpha1.SecretSpec, len(secrets))
+	for name, configmap := range secrets {
+		normalized[fmt.Sprintf("%s%s", prefix, name)] = configmap
+	}
+
 	merged := make(map[string]string)
 	for _, sec := range manifest.Secrets {
-		if secret, ok := secrets[sec.Name]; ok {
+		if secret, ok := normalized[sec.Name]; ok {
 			mergeSecret(sec, secret, ns, labels)
 			merged[sec.Name] = ""
 		}
 		continue
 	}
 
-	for name, sec := range secrets {
+	for name, sec := range normalized {
 		if _, ok := merged[name]; ok {
 			continue
 		}
@@ -220,8 +252,9 @@ func mergeSecret(manifest *core_v1.Secret, secret *v1alpha1.SecretSpec, ns strin
 	manifest.StringData = secret.StringData
 }
 
-func servicesCustom(manifest *manifest.Manifests, services map[string]*v1alpha1.ServiceSpec, ns string, labels map[string]string) {
+func servicesCustom(manifest *manifest.Manifests, services map[string]*v1alpha1.ServiceSpec, prefix, ns string, labels map[string]string) {
 	for _, svc := range manifest.Services {
+		updateNameWithPrefix(prefix, &svc.ObjectMeta)
 		mergeService(svc, nil, ns, labels)
 	}
 
@@ -229,16 +262,21 @@ func servicesCustom(manifest *manifest.Manifests, services map[string]*v1alpha1.
 		return
 	}
 
+	normalized := make(map[string]*v1alpha1.ServiceSpec, len(services))
+	for name, svc := range services {
+		normalized[fmt.Sprintf("%s%s", prefix, name)] = svc
+	}
+
 	merged := make(map[string]string)
 	for _, srv := range manifest.Services {
-		if service, ok := services[srv.Name]; ok {
+		if service, ok := normalized[srv.Name]; ok {
 			mergeService(srv, service, ns, labels)
 			merged[srv.Name] = ""
 		}
 		continue
 	}
 
-	for name, srv := range services {
+	for name, srv := range normalized {
 		if _, ok := merged[name]; ok {
 			continue
 		}
@@ -314,17 +352,54 @@ func mergeSelectorLabels(meta map[string]string, labels map[string]string) {
 	}
 }
 
-func updateSubjectsNamespace(subjects []rbac_v1.Subject, ns string) (result []rbac_v1.Subject) {
-	if len(ns) > 0 {
-		for _, sub := range subjects {
-			result = append(result, rbac_v1.Subject{
-				Kind:      sub.Kind,
-				APIGroup:  sub.APIGroup,
-				Name:      sub.Name,
-				Namespace: ns,
-			})
-		}
-		return result
+func updateIngressRules(rules []networking_v1.IngressRule, prefix string) (result []networking_v1.IngressRule) {
+	for _, rule := range rules {
+		result = append(result, networking_v1.IngressRule{
+			Host: rule.Host,
+			IngressRuleValue: networking_v1.IngressRuleValue{
+				HTTP: updateIngressRuleValue(prefix, rule.HTTP),
+			},
+		})
 	}
-	return subjects
+	return result
+}
+
+func updateIngressRuleValue(prefix string, value *networking_v1.HTTPIngressRuleValue) *networking_v1.HTTPIngressRuleValue {
+	if value == nil {
+		return nil
+	}
+	result := &networking_v1.HTTPIngressRuleValue{}
+
+	for _, path := range value.Paths {
+		path.Backend.Service.Name = fmt.Sprintf("%s%s", prefix, path.Backend.Service.Name)
+		result.Paths = append(result.Paths, path)
+	}
+	return result
+}
+
+func updateSubjects(subjects []rbac_v1.Subject, prefix, ns string) (result []rbac_v1.Subject) {
+	for _, sub := range subjects {
+		result = append(result, rbac_v1.Subject{
+			Kind:      sub.Kind,
+			APIGroup:  sub.APIGroup,
+			Name:      fmt.Sprintf("%s%s", prefix, sub.Name),
+			Namespace: updateNamespace(sub.Namespace, ns),
+		})
+	}
+	return result
+}
+
+func updateRoleRef(roleRef *rbac_v1.RoleRef, prefix string) {
+	roleRef.Name = fmt.Sprintf("%s%s", prefix, roleRef.Name)
+}
+
+func updateNamespace(ori, new string) string {
+	if len(new) > 0 {
+		return new
+	}
+	return ori
+}
+
+func updateNameWithPrefix(prefix string, meta *metav1.ObjectMeta) {
+	meta.Name = fmt.Sprintf("%s%s", prefix, meta.Name)
 }

@@ -1,6 +1,8 @@
 package specs
 
 import (
+	"fmt"
+
 	app_v1 "k8s.io/api/apps/v1"
 	batch_v1 "k8s.io/api/batch/v1"
 	core_v1 "k8s.io/api/core/v1"
@@ -8,9 +10,19 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 )
 
-func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec, ns string, labels map[string]string) error {
+func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec, prefix, ns string, labels map[string]string) error {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
-	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
+	updateServiceAccount(&manifest.Spec.Template, prefix)
+
+	var merge *v1alpha1.PodTemplateSpec
+	if spec != nil {
+		merge = spec.Template
+	}
+	err := mergePodTemplate(&manifest.Spec.Template, merge, prefix, ns, labels)
+	if err != nil {
+		return err
+	}
 
 	if spec == nil {
 		return nil
@@ -21,12 +33,6 @@ func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec,
 	}
 	if spec.Selector != nil {
 		manifest.Spec.Selector = spec.Selector
-	}
-	if spec.Template != nil {
-		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
-		if err != nil {
-			return err
-		}
 	}
 	if spec.Strategy != nil {
 		manifest.Spec.Strategy = *spec.Strategy
@@ -40,9 +46,19 @@ func mergeDeployment(manifest *app_v1.Deployment, spec *v1alpha1.DeploymentSpec,
 	return nil
 }
 
-func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, ns string, labels map[string]string) error {
+func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, prefix, ns string, labels map[string]string) error {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
-	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
+	updateServiceAccount(&manifest.Spec.Template, prefix)
+
+	var merge *v1alpha1.PodTemplateSpec
+	if spec != nil {
+		merge = spec.Template
+	}
+	err := mergePodTemplate(&manifest.Spec.Template, merge, prefix, ns, labels)
+	if err != nil {
+		return err
+	}
 
 	if spec == nil {
 		return nil
@@ -50,12 +66,6 @@ func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, ns
 
 	if spec.Selector != nil {
 		manifest.Spec.Selector = spec.Selector
-	}
-	if spec.Template != nil {
-		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
-		if err != nil {
-			return err
-		}
 	}
 	if spec.UpdateStrategy != nil {
 		manifest.Spec.UpdateStrategy = *spec.UpdateStrategy
@@ -69,9 +79,20 @@ func mergeDaemonset(manifest *app_v1.DaemonSet, spec *v1alpha1.DaemonSetSpec, ns
 	return nil
 }
 
-func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSpec, ns string, labels map[string]string) error {
+func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSpec, prefix, ns string, labels map[string]string) error {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
-	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
+	updateServiceAccount(&manifest.Spec.Template, prefix)
+	updateServiceName(manifest, prefix)
+
+	var merge *v1alpha1.PodTemplateSpec
+	if spec != nil {
+		merge = spec.Template
+	}
+	err := mergePodTemplate(&manifest.Spec.Template, merge, prefix, ns, labels)
+	if err != nil {
+		return err
+	}
 
 	if spec == nil {
 		return nil
@@ -82,17 +103,13 @@ func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSp
 	if spec.Selector != nil {
 		manifest.Spec.Selector = spec.Selector
 	}
-	if spec.Template != nil {
-		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
-		if err != nil {
-			return err
-		}
-	}
+
 	if spec.VolumeClaimTemplates != nil {
 		manifest.Spec.VolumeClaimTemplates = spec.VolumeClaimTemplates
 	}
 	if spec.ServiceName != nil {
 		manifest.Spec.ServiceName = *spec.ServiceName
+		updateServiceName(manifest, prefix)
 	}
 	if spec.PodManagementPolicy != nil {
 		manifest.Spec.PodManagementPolicy = *spec.PodManagementPolicy
@@ -115,9 +132,19 @@ func mergeStatefulSet(manifest *app_v1.StatefulSet, spec *v1alpha1.StatefulSetSp
 	return nil
 }
 
-func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, ns string, labels map[string]string) error {
+func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, prefix, ns string, labels map[string]string) error {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
-	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
+	updateServiceAccount(&manifest.Spec.Template, prefix)
+
+	var merge *v1alpha1.PodTemplateSpec
+	if spec != nil {
+		merge = spec.Template
+	}
+	err := mergePodTemplate(&manifest.Spec.Template, merge, prefix, ns, labels)
+	if err != nil {
+		return err
+	}
 
 	if spec == nil {
 		return nil
@@ -144,12 +171,6 @@ func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, ns string, labels 
 	if spec.ManualSelector != nil {
 		manifest.Spec.ManualSelector = spec.ManualSelector
 	}
-	if spec.Template != nil {
-		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
-		if err != nil {
-			return err
-		}
-	}
 	if spec.TTLSecondsAfterFinished != nil {
 		manifest.Spec.TTLSecondsAfterFinished = spec.TTLSecondsAfterFinished
 	}
@@ -162,8 +183,18 @@ func mergeJob(manifest *batch_v1.Job, spec *v1alpha1.JobSpec, ns string, labels 
 	return nil
 }
 
-func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, ns string, labels map[string]string) error {
+func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, prefix, ns string, labels map[string]string) error {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+
+	var merge *v1alpha1.JobTemplateSpec
+	if spec != nil {
+		merge = spec.JobTemplate
+	}
+	err := mergeJobTemplate(manifest.Spec.JobTemplate, merge, prefix, ns, labels)
+	if err != nil {
+		return err
+	}
 
 	if spec == nil {
 		return nil
@@ -184,12 +215,6 @@ func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, ns str
 	if spec.Suspend != nil {
 		manifest.Spec.Suspend = spec.Suspend
 	}
-	if spec.JobTemplate != nil {
-		err := mergeJobTemplate(manifest.Spec.JobTemplate, spec.JobTemplate, ns, labels)
-		if err != nil {
-			return err
-		}
-	}
 	if spec.SuccessfulJobsHistoryLimit != nil {
 		manifest.Spec.SuccessfulJobsHistoryLimit = spec.SuccessfulJobsHistoryLimit
 	}
@@ -199,9 +224,19 @@ func mergeCronJob(manifest *batch_v1.CronJob, spec *v1alpha1.CronJobSpec, ns str
 	return nil
 }
 
-func mergeReplicaSet(manifest *app_v1.ReplicaSet, spec *v1alpha1.ReplicaSetSpec, ns string, labels map[string]string) error {
+func mergeReplicaSet(manifest *app_v1.ReplicaSet, spec *v1alpha1.ReplicaSetSpec, prefix, ns string, labels map[string]string) error {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
-	mergePodTemplateObjectMeta(&manifest.Spec.Template.ObjectMeta, labels)
+	updateServiceAccount(&manifest.Spec.Template, prefix)
+
+	var merge *v1alpha1.PodTemplateSpec
+	if spec != nil {
+		merge = spec.Template
+	}
+	err := mergePodTemplate(&manifest.Spec.Template, merge, prefix, ns, labels)
+	if err != nil {
+		return err
+	}
 
 	if spec == nil {
 		return nil
@@ -215,17 +250,13 @@ func mergeReplicaSet(manifest *app_v1.ReplicaSet, spec *v1alpha1.ReplicaSetSpec,
 	if spec.Selector != nil {
 		manifest.Spec.Selector = spec.Selector
 	}
-	if spec.Template != nil {
-		err := mergePodTemplate(&manifest.Spec.Template, spec.Template, ns, labels)
-		if err != nil {
-			return err
-		}
-	}
+
 	return nil
 }
 
-func mergePodTemplate(manifest *core_v1.PodTemplateSpec, spec *v1alpha1.PodTemplateSpec, ns string, labels map[string]string) error {
+func mergePodTemplate(manifest *core_v1.PodTemplateSpec, spec *v1alpha1.PodTemplateSpec, prefix, ns string, labels map[string]string) error {
 	mergePodTemplateObjectMeta(&manifest.ObjectMeta, labels)
+	manifest.Spec.Volumes = updateVolumes(manifest.Spec.Volumes, prefix)
 
 	if spec == nil {
 		return nil
@@ -246,7 +277,8 @@ func mergePodTemplate(manifest *core_v1.PodTemplateSpec, spec *v1alpha1.PodTempl
 		manifest.Spec.InitContainers = merged
 	}
 	if spec.Spec.Volumes != nil {
-		merged, err := MergePatchVolumes(manifest.Spec.Volumes, spec.Spec.Volumes)
+		toMerge := updateVolumes(spec.Spec.Volumes, prefix)
+		merged, err := MergePatchVolumes(manifest.Spec.Volumes, toMerge)
 		if err != nil {
 			return err
 		}
@@ -260,6 +292,7 @@ func mergePodTemplate(manifest *core_v1.PodTemplateSpec, spec *v1alpha1.PodTempl
 	}
 	if spec.Spec.ServiceAccountName != nil {
 		manifest.Spec.ServiceAccountName = *spec.Spec.ServiceAccountName
+		updateServiceAccount(manifest, prefix)
 	}
 	if spec.Spec.SecurityContext != nil {
 		manifest.Spec.SecurityContext = spec.Spec.SecurityContext
@@ -285,8 +318,19 @@ func mergePodTemplate(manifest *core_v1.PodTemplateSpec, spec *v1alpha1.PodTempl
 	return nil
 }
 
-func mergeJobTemplate(manifest batch_v1.JobTemplateSpec, spec *v1alpha1.JobTemplateSpec, ns string, labels map[string]string) error {
+func mergeJobTemplate(manifest batch_v1.JobTemplateSpec, spec *v1alpha1.JobTemplateSpec, prefix, ns string, labels map[string]string) error {
+	updateNameWithPrefix(prefix, &manifest.ObjectMeta)
 	mergeObjectMeta(&manifest.ObjectMeta, ns, labels)
+	updateServiceAccount(&manifest.Spec.Template, prefix)
+
+	var merge *v1alpha1.PodTemplateSpec
+	if spec != nil {
+		merge = spec.Spec.Template
+	}
+	err := mergePodTemplate(&manifest.Spec.Template, merge, prefix, ns, labels)
+	if err != nil {
+		return err
+	}
 
 	if spec == nil {
 		return nil
@@ -313,12 +357,6 @@ func mergeJobTemplate(manifest batch_v1.JobTemplateSpec, spec *v1alpha1.JobTempl
 	if spec.Spec.ManualSelector != nil {
 		manifest.Spec.ManualSelector = spec.Spec.ManualSelector
 	}
-	if spec.Spec.Template != nil {
-		err := mergePodTemplate(&manifest.Spec.Template, spec.Spec.Template, ns, labels)
-		if err != nil {
-			return err
-		}
-	}
 	if spec.Spec.TTLSecondsAfterFinished != nil {
 		manifest.Spec.TTLSecondsAfterFinished = spec.Spec.TTLSecondsAfterFinished
 	}
@@ -329,4 +367,35 @@ func mergeJobTemplate(manifest batch_v1.JobTemplateSpec, spec *v1alpha1.JobTempl
 		manifest.Spec.Suspend = spec.Spec.Suspend
 	}
 	return nil
+}
+
+func updateServiceAccount(template *core_v1.PodTemplateSpec, prefix string) {
+	if len(template.Spec.ServiceAccountName) > 0 {
+		template.Spec.ServiceAccountName = fmt.Sprintf("%s%s", prefix, template.Spec.ServiceAccountName)
+		return
+	}
+
+	if len(template.Spec.DeprecatedServiceAccount) > 0 {
+		template.Spec.ServiceAccountName = fmt.Sprintf("%s%s", prefix, template.Spec.DeprecatedServiceAccount)
+		template.Spec.DeprecatedServiceAccount = ""
+	}
+}
+
+func updateServiceName(sts *app_v1.StatefulSet, prefix string) {
+	if len(sts.Spec.ServiceName) > 0 {
+		sts.Spec.ServiceName = fmt.Sprintf("%s%s", prefix, sts.Spec.ServiceName)
+	}
+}
+
+func updateVolumes(volumes []core_v1.Volume, prefix string) (result []core_v1.Volume) {
+	for _, vol := range volumes {
+		if vol.ConfigMap != nil {
+			vol.ConfigMap.Name = fmt.Sprintf("%s%s", prefix, vol.ConfigMap.Name)
+		}
+		if vol.Secret != nil {
+			vol.Secret.SecretName = fmt.Sprintf("%s%s", prefix, vol.Secret.SecretName)
+		}
+		result = append(result, vol)
+	}
+	return result
 }

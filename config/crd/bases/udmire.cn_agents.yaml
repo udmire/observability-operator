@@ -43012,6 +43012,72 @@ spec:
                       type: object
                   type: object
                 type: object
+              deps:
+                description: App Dependencies, must be ready before AppSpec Applied.
+                properties:
+                  capsules:
+                    additionalProperties:
+                      description: CapsuleSpec defines the desired state of Capsule
+                      properties:
+                        components:
+                          additionalProperties:
+                            properties:
+                              configmaps:
+                                additionalProperties:
+                                  properties:
+                                    data:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                type: object
+                              secrets:
+                                additionalProperties:
+                                  properties:
+                                    stringData:
+                                      additionalProperties:
+                                        type: string
+                                      type: object
+                                  type: object
+                                type: object
+                            type: object
+                          type: object
+                        configmaps:
+                          additionalProperties:
+                            properties:
+                              data:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            type: object
+                          type: object
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        secrets:
+                          additionalProperties:
+                            properties:
+                              stringData:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            type: object
+                          type: object
+                        template:
+                          properties:
+                            name:
+                              type: string
+                            version:
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      required:
+                      - template
+                      type: object
+                    type: object
+                type: object
               ingress:
                 properties:
                   defaultBackend:
@@ -43529,6 +43595,8 @@ spec:
                       type: object
                   type: object
                 type: object
+              singleton:
+                type: boolean
               template:
                 properties:
                   name:

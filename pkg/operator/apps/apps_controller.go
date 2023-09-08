@@ -34,16 +34,14 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
+	"github.com/udmire/observability-operator/pkg/operator/base"
 	"github.com/udmire/observability-operator/pkg/operator/manager"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 )
 
 // AppsReconciler reconciles a Apps object
 type AppsReconciler struct {
-	*services.BasicService
-
-	client.Client
-	Scheme *runtime.Scheme
+	base.BaseReconciler
 
 	cfg Config
 
@@ -52,18 +50,19 @@ type AppsReconciler struct {
 
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
-	logger        log.Logger
 }
 
 func New(client client.Client, schema *runtime.Scheme, config Config, tp provider.TemplateProvider, logger log.Logger) *AppsReconciler {
 	reconciler := &AppsReconciler{
-		Client: client,
-		Scheme: schema,
+		BaseReconciler: base.BaseReconciler{
+			Client: client,
+			Scheme: schema,
+			Logger: logger,
+		},
 
 		cfg:           config,
 		handler:       specs.New(tp, logger),
 		appReconciler: reconcile.New(logger, client),
-		logger:        logger,
 	}
 	reconciler.BasicService = services.NewIdleService(func(serviceContext context.Context) error {
 		return reconciler.SetupWithManager(reconciler.mgr)
@@ -93,15 +92,15 @@ func (r *AppsReconciler) SetClusterNameProvider(cnp manager.ClusterNameProvider)
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *AppsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	level.Info(r.logger).Log("msg", "reconciling applications")
-	defer level.Info(r.logger).Log("msg", "done reconciling applications")
+	level.Info(r.Logger).Log("msg", "reconciling applications")
+	defer level.Info(r.Logger).Log("msg", "done reconciling applications")
 
 	instance := &v1alpha1.Apps{}
 	if err := r.Get(ctx, req.NamespacedName, instance); apierrors.IsNotFound(err) {
-		level.Error(r.logger).Log("msg", "detected deleted Apps", "err", err)
+		level.Error(r.Logger).Log("msg", "detected deleted Apps", "err", err)
 		return ctrl.Result{}, nil
 	} else if err != nil {
-		level.Error(r.logger).Log("msg", "unable to get Apps", "err", err)
+		level.Error(r.Logger).Log("msg", "unable to get Apps", "err", err)
 		return ctrl.Result{}, nil
 	}
 
@@ -152,20 +151,25 @@ func (r *AppsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		go func(app v1alpha1.AppSpec) {
 			defer wg.Done()
 			semaphore <- struct{}{}
+			defer func() {
+				<-semaphore
+			}()
 
 			manifest, err := r.handler.Handle(app)
 			if err != nil {
-				level.Error(r.logger).Log("msg", "failed to generate manifests", "instance", instance.Name, "applicaion", app.Name, "err", err)
-				<-semaphore
+				level.Error(r.Logger).Log("msg", "failed to generate manifests", "instance", instance.Name, "application", app.Name, "err", err)
+				return
+			}
+
+			if err := r.ProcessDependencies(owner, instance.Namespace, app.Template, app.Singleton, app.Dependencies); err != nil {
+				level.Error(r.Logger).Log("msg", "failed to create dependencies", "instance", instance.Name, "application", app.Name, "err", err)
 				return
 			}
 
 			err = r.appReconciler.Reconcile(owner, "application", app.Name, manifest)
 			if err != nil {
-				level.Error(r.logger).Log("msg", "failed to apply manifests", "instance", instance.Name, "application", app.Name, "err", err)
+				level.Error(r.Logger).Log("msg", "failed to apply manifests", "instance", instance.Name, "application", app.Name, "err", err)
 			}
-
-			<-semaphore
 		}(apploy)
 	}
 	wg.Wait()
@@ -177,6 +181,9 @@ func (r *AppsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *AppsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Apps{}).
+		Owns(&v1alpha1.Exporters{}).
+		Owns(&v1alpha1.Apps{}).
+		Owns(&v1alpha1.Capsule{}).
 		Complete(r)
 }
 

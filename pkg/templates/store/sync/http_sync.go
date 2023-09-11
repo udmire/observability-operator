@@ -81,7 +81,7 @@ func (s *httpSync) DownloadTemplate(name, url string) error {
 	}
 	defer resp.Body.Close()
 
-	tempFile, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("%s.temp", splits[1]))
+	tempFile, err := os.CreateTemp(s.storePath, fmt.Sprintf("%s.temp", splits[1]))
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "cannot create temp file for downloading template.", "url", url, "err", err)
 		return err

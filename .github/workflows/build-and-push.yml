@@ -13,15 +13,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v2
 
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.16
-
-      - name: Build Operator
-        run: |
-          go build -o operator ./path/to/operator
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v1
         with:

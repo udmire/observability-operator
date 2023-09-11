@@ -43,7 +43,7 @@ type LocalStore struct {
 }
 
 func New(cfg Config, logger log.Logger) *LocalStore {
-	err := os.MkdirAll(cfg.Directory, os.ModeDir)
+	err := os.MkdirAll(cfg.Directory, 0755)
 	if err != nil {
 		level.Warn(logger).Log("msg", "failed to validate the template folder", "folder", cfg.Directory, "err", err)
 		panic("invalid config for templates")

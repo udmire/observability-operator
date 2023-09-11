@@ -95,7 +95,7 @@ func (s *httpSync) DownloadTemplate(name, url string) error {
 	}
 	resp.Body.Close()
 
-	err = os.MkdirAll(filepath.Join(s.storePath, splits[0]), os.ModeDir)
+	err = os.MkdirAll(filepath.Join(s.storePath, splits[0]), 0755)
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "cannot create target dir for content.", "dir", splits[0], "err", err)
 		return err

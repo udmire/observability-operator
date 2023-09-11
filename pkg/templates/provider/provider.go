@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"context"
+
 	"github.com/grafana/dskit/services"
 	"github.com/udmire/observability-operator/pkg/templates/template"
 )
@@ -20,4 +22,10 @@ type TemplateProvider interface {
 
 type CategryTemplateProvider interface {
 	GetProvider(category string) TemplateProvider
+}
+
+type TemplatesSynchronizer interface {
+	services.Service
+
+	Synchronize(ctx context.Context) error
 }

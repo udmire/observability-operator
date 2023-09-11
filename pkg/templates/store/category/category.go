@@ -12,18 +12,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 	"github.com/udmire/observability-operator/pkg/templates/store/local"
+	"github.com/udmire/observability-operator/pkg/templates/store/sync"
 )
 
 type Config struct {
 	BaseDirectory string                 `yaml:"base_directory"`
 	Categories    flagext.StringSliceCSV `yaml:"categories"`
+	Synchronize   sync.Config            `yaml:"sync"`
 }
 
 func (c *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&c.BaseDirectory, "templates.store.category.base-directory", "/data/templates", "where the templates stored in local.")
 	c.Categories = []string{provider.Apps, provider.Capsules}
-
 	f.Var(&c.Categories, "templates.store.category.categories", "Comma-separated list of template categories.")
+
+	c.Synchronize.RegisterFlags(f)
 }
 
 type CategoryStore struct {
@@ -35,7 +38,8 @@ type CategoryStore struct {
 	subservices        *services.Manager
 	subservicesWatcher *services.FailureWatcher
 
-	providers map[string]provider.TemplateProvider
+	providers   map[string]provider.TemplateProvider
+	synchorizer provider.TemplatesSynchronizer
 }
 
 func New(cfg Config, logger log.Logger) *CategoryStore {
@@ -44,6 +48,9 @@ func New(cfg Config, logger log.Logger) *CategoryStore {
 		logger: logger,
 	}
 	store.providers = buildProviders(cfg, logger)
+	if store.cfg.Synchronize.Enabled {
+		store.synchorizer = sync.NewHttpSynchronizer(cfg.Synchronize, cfg.BaseDirectory, logger)
+	}
 	store.BasicService = services.NewBasicService(store.starting, store.run, store.stopping)
 	return store
 }
@@ -64,12 +71,16 @@ func buildProviders(cfg Config, logger log.Logger) map[string]provider.TemplateP
 func (r *CategoryStore) starting(ctx context.Context) error {
 	var err error
 
-	var stores []services.Service
+	var svcs []services.Service
 	for _, provider := range r.providers {
-		stores = append(stores, provider)
+		svcs = append(svcs, provider)
 	}
 
-	if r.subservices, err = services.NewManager(stores...); err != nil {
+	if r.synchorizer != nil {
+		svcs = append(svcs, r.synchorizer)
+	}
+
+	if r.subservices, err = services.NewManager(svcs...); err != nil {
 		return errors.Wrap(err, "unable to start category stores")
 	}
 

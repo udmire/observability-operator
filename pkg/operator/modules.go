@@ -9,6 +9,7 @@ import (
 	"github.com/udmire/observability-operator/pkg/operator/capsules"
 	"github.com/udmire/observability-operator/pkg/operator/exporters"
 	"github.com/udmire/observability-operator/pkg/operator/manager"
+	info "github.com/udmire/observability-operator/pkg/operator/providers"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 	"github.com/udmire/observability-operator/pkg/templates/store/category"
 	util_log "github.com/udmire/observability-operator/pkg/utils/log"
@@ -18,6 +19,7 @@ import (
 const (
 	TemplateStorage string = "template-storage"
 	CtrlManager     string = "ctrl-manager"
+	InfoProviders   string = "info-providers"
 	Apps            string = "apps"
 	Agents          string = "agents"
 	Exporters       string = "exporters"
@@ -42,6 +44,12 @@ func (op *Operator) initCtrlManager() (serv services.Service, err error) {
 	return wrapper, nil
 }
 
+func (op *Operator) initInfoProviders() (serv services.Service, err error) {
+	providers := info.NewProviders(op.ControllerManager.Manager().GetClient(), util_log.Logger)
+	op.InfoProviders = providers
+	return providers, nil
+}
+
 func (op *Operator) initAgentsController() (serv services.Service, err error) {
 	ctrl := agents.New(
 		op.ControllerManager.Manager().GetClient(),
@@ -50,7 +58,7 @@ func (op *Operator) initAgentsController() (serv services.Service, err error) {
 		util_log.Logger)
 
 	ctrl.SetManager(op.ControllerManager.Manager())
-	ctrl.SetClusterNameProvider(op.ControllerManager.ClusterNameProvider())
+	ctrl.SetClusterNameProvider(op.InfoProviders.ClusterNameProvider())
 
 	return ctrl, nil
 }
@@ -63,7 +71,7 @@ func (op *Operator) initAppsController() (serv services.Service, err error) {
 		op.TemplateStore.GetProvider(provider.Apps),
 		util_log.Logger)
 	ctrl.SetManager(op.ControllerManager.Manager())
-	ctrl.SetClusterNameProvider(op.ControllerManager.ClusterNameProvider())
+	ctrl.SetClusterNameProvider(op.InfoProviders.ClusterNameProvider())
 
 	return ctrl, nil
 }
@@ -76,7 +84,7 @@ func (op *Operator) initExportersController() (serv services.Service, err error)
 		op.TemplateStore.GetProvider(provider.Apps),
 		util_log.Logger)
 	ctrl.SetManager(op.ControllerManager.Manager())
-	ctrl.SetClusterNameProvider(op.ControllerManager.ClusterNameProvider())
+	ctrl.SetClusterNameProvider(op.InfoProviders.ClusterNameProvider())
 
 	return ctrl, nil
 }
@@ -88,7 +96,7 @@ func (op *Operator) initCapsulesController() (serv services.Service, err error) 
 		op.TemplateStore.GetProvider(provider.Capsules),
 		util_log.Logger)
 	ctrl.SetManager(op.ControllerManager.Manager())
-	ctrl.SetClusterNameProvider(op.ControllerManager.ClusterNameProvider())
+	ctrl.SetClusterNameProvider(op.InfoProviders.ClusterNameProvider())
 
 	return ctrl, nil
 }
@@ -98,6 +106,7 @@ func (op *Operator) SetupModuleManager() error {
 
 	mm.RegisterModule(TemplateStorage, op.initTemplateStore, modules.UserInvisibleModule)
 	mm.RegisterModule(CtrlManager, op.initCtrlManager, modules.UserInvisibleModule)
+	mm.RegisterModule(InfoProviders, op.initInfoProviders, modules.UserInvisibleModule)
 	mm.RegisterModule(Agents, op.initAgentsController)
 	mm.RegisterModule(Apps, op.initAppsController)
 	mm.RegisterModule(Exporters, op.initExportersController)
@@ -106,11 +115,13 @@ func (op *Operator) SetupModuleManager() error {
 
 	// Add dependencies
 	deps := map[string][]string{
-		Apps:      {TemplateStorage, CtrlManager},
-		Agents:    {TemplateStorage, CtrlManager},
-		Exporters: {TemplateStorage, CtrlManager},
-		Capsules:  {TemplateStorage, CtrlManager},
-		All:       {Apps, Agents, Exporters, Capsules},
+		CtrlManager:   {},
+		InfoProviders: {CtrlManager},
+		Apps:          {TemplateStorage, InfoProviders},
+		Agents:        {TemplateStorage, InfoProviders},
+		Exporters:     {TemplateStorage, InfoProviders},
+		Capsules:      {TemplateStorage, InfoProviders},
+		All:           {Apps, Agents, Exporters, Capsules},
 	}
 
 	for mod, targets := range deps {

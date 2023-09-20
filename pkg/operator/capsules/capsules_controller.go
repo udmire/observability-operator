@@ -16,7 +16,7 @@ import (
 	"github.com/udmire/observability-operator/api/v1alpha1"
 	"github.com/udmire/observability-operator/pkg/capsules/reconcile"
 	"github.com/udmire/observability-operator/pkg/capsules/specs"
-	"github.com/udmire/observability-operator/pkg/operator/manager"
+	info "github.com/udmire/observability-operator/pkg/operator/providers"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 )
 
@@ -28,7 +28,7 @@ type CapsulesReconciler struct {
 	Scheme *runtime.Scheme
 
 	mgr ctrl.Manager
-	cnp manager.ClusterNameProvider
+	cnp info.StringProvider
 
 	handler       specs.CapsuleHandler
 	capReconciler reconcile.CapsuleReconciler
@@ -54,7 +54,7 @@ func (r *CapsulesReconciler) SetManager(mgr ctrl.Manager) {
 	r.mgr = mgr
 }
 
-func (r *CapsulesReconciler) SetClusterNameProvider(cnp manager.ClusterNameProvider) {
+func (r *CapsulesReconciler) SetClusterNameProvider(cnp info.StringProvider) {
 	r.cnp = cnp
 }
 

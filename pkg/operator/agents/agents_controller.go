@@ -35,7 +35,7 @@ import (
 	"github.com/udmire/observability-operator/pkg/apps/reconcile"
 	"github.com/udmire/observability-operator/pkg/apps/specs"
 	"github.com/udmire/observability-operator/pkg/operator/base"
-	"github.com/udmire/observability-operator/pkg/operator/manager"
+	info "github.com/udmire/observability-operator/pkg/operator/providers"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 )
 
@@ -44,7 +44,7 @@ type AgentsReconciler struct {
 	base.BaseReconciler
 
 	mgr ctrl.Manager
-	cnp manager.ClusterNameProvider
+	cnp info.StringProvider
 
 	handler       specs.AppHandler
 	appReconciler reconcile.AppReconciler
@@ -71,7 +71,7 @@ func (r *AgentsReconciler) SetManager(mgr ctrl.Manager) {
 	r.mgr = mgr
 }
 
-func (r *AgentsReconciler) SetClusterNameProvider(cnp manager.ClusterNameProvider) {
+func (r *AgentsReconciler) SetClusterNameProvider(cnp info.StringProvider) {
 	r.cnp = cnp
 }
 

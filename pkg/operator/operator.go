@@ -19,6 +19,7 @@ import (
 	"github.com/udmire/observability-operator/pkg/operator/apps"
 	"github.com/udmire/observability-operator/pkg/operator/exporters"
 	"github.com/udmire/observability-operator/pkg/operator/manager"
+	info "github.com/udmire/observability-operator/pkg/operator/providers"
 	"github.com/udmire/observability-operator/pkg/templates/provider"
 	"github.com/udmire/observability-operator/pkg/templates/store/category"
 	"github.com/udmire/observability-operator/pkg/utils"
@@ -82,6 +83,7 @@ type Operator struct {
 
 	TemplateStore     provider.CategryTemplateProvider
 	ControllerManager manager.CtrlManagerWraper
+	InfoProviders     info.Providers
 
 	AppsController      *apps.AppsReconciler
 	AgentsController    *agents.AgentsReconciler

@@ -7,7 +7,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
-	"github.com/pkg/errors"
 	udmirecnv1alpha1 "github.com/udmire/observability-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -17,11 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-type ClusterNameProvider func() string
-
 type CtrlManagerWraper interface {
 	Manager() ctrl.Manager
-	ClusterNameProvider() ClusterNameProvider
 }
 
 type Config struct {
@@ -29,7 +25,6 @@ type Config struct {
 	MetricsAddress        string `yaml:"metric_address"`
 	ProbeAddress          string `yaml:"probe_address"`
 	EnabledLeaderElection bool   `yaml:"enable_leader_election"`
-	ClusterName           string `yaml:"cluster_name"`
 }
 
 func (c *Config) RegisterFlags(f *flag.FlagSet) {
@@ -37,7 +32,6 @@ func (c *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&c.MetricsAddress, "manager.metrics-address", ":8080", "The address the metric endpoint binds to.")
 	f.StringVar(&c.ProbeAddress, "manager.probe-address", ":8081", "The address the probe endpoint binds to.")
 	f.BoolVar(&c.EnabledLeaderElection, "manager.leader-elect", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
-	f.StringVar(&c.ClusterName, "manager.cluster-name", "", "The k8s cluster name to specified.")
 }
 
 type managerWraper struct {
@@ -45,11 +39,6 @@ type managerWraper struct {
 
 	cfg    Config
 	logger log.Logger
-
-	clusterInfo *clusterInfoProvider
-
-	subservices        *services.Manager
-	subservicesWatcher *services.FailureWatcher
 
 	Mgr manager.Manager
 }
@@ -61,9 +50,7 @@ func NewManagerWraper(cfg Config, logger log.Logger) *managerWraper {
 	}
 
 	_ = wraper.createManager()
-	wraper.clusterInfo = newClusterInfoProvider(&wraper.cfg, wraper.Mgr.GetClient(), logger)
-
-	wraper.BasicService = services.NewBasicService(wraper.starting, wraper.run, wraper.stopping)
+	wraper.BasicService = services.NewBasicService(nil, wraper.run, nil)
 
 	return wraper
 }
@@ -100,45 +87,6 @@ func (w *managerWraper) Manager() ctrl.Manager {
 	return w.Mgr
 }
 
-func (w *managerWraper) ClusterNameProvider() ClusterNameProvider {
-	return func() string {
-		return w.clusterInfo.cfg.ClusterName
-	}
-}
-
-func (r *managerWraper) starting(ctx context.Context) error {
-	var err error
-
-	if r.subservices, err = services.NewManager(services.NewBasicService(nil, r.startManager, nil), r.clusterInfo); err != nil {
-		return errors.Wrap(err, "unable to start category stores")
-	}
-
-	r.subservicesWatcher = services.NewFailureWatcher()
-	r.subservicesWatcher.WatchManager(r.subservices)
-
-	if err = services.StartManagerAndAwaitHealthy(ctx, r.subservices); err != nil {
-		return errors.Wrap(err, "unable to start controller manager wraper")
-	}
-
-	return nil
-}
-
 func (r *managerWraper) run(ctx context.Context) error {
-	level.Info(r.logger).Log("msg", "controller manager up and running")
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case err := <-r.subservicesWatcher.Chan():
-			return errors.Wrap(err, "controller manager subservice failed")
-		}
-	}
-}
-
-func (r *managerWraper) stopping(_ error) error {
-	if r.subservices != nil {
-		_ = services.StopManagerAndAwaitStopped(context.Background(), r.subservices)
-	}
-	return nil
+	return r.startManager(ctx)
 }

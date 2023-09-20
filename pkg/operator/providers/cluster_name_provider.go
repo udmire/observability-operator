@@ -1,60 +1,43 @@
-package manager
+package providers
 
 import (
 	"context"
 	"os"
 	"time"
 
-	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/grafana/dskit/services"
+	"gopkg.in/yaml.v2"
 	core_v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type clusterInfoProvider struct {
-	*services.BasicService
-
-	cli client.Client
-
-	cfg    *Config
-	logger log.Logger
-}
-
-func newClusterInfoProvider(cfg *Config, cli client.Client, logger log.Logger) *clusterInfoProvider {
-	provider := &clusterInfoProvider{
-		cfg:    cfg,
-		logger: logger,
-		cli:    cli,
+func (w *providers) ClusterNameProvider() StringProvider {
+	return func() string {
+		return w.holders.clusterName
 	}
-
-	provider.BasicService = services.NewBasicService(nil, provider.tryUpdateClusterName, nil)
-
-	return provider
 }
-func (w *clusterInfoProvider) tryUpdateClusterName(_ context.Context) error {
-	if len(w.cfg.ClusterName) > 0 {
+
+func (w *providers) tryUpdateClusterName(_ context.Context) error {
+	if len(w.holders.clusterName) > 0 {
 		return nil
 	}
 
 	// try read name from env
-	w.cfg.ClusterName = os.Getenv("KUBERNETES_CLUSTER_NAME")
-	if len(w.cfg.ClusterName) > 0 {
+	w.holders.clusterName = os.Getenv("KUBERNETES_CLUSTER_NAME")
+	if len(w.holders.clusterName) > 0 {
 		return nil
 	}
 
 	// try read name from kubeadm-config
 	w.tryUpdateClusterNameFromKubeadmConfig()
-	if len(w.cfg.ClusterName) > 0 {
+	if len(w.holders.clusterName) > 0 {
 		return nil
 	}
 	return nil
 }
 
-func (w *clusterInfoProvider) tryUpdateClusterNameFromKubeadmConfig() {
-
+func (w *providers) tryUpdateClusterNameFromKubeadmConfig() {
 	cm := &core_v1.ConfigMap{}
 	err := w.cli.Get(context.Background(), client.ObjectKey{Namespace: "kube-system", Name: "kubeadm-config"}, cm)
 	if err != nil {
@@ -84,5 +67,5 @@ func (w *clusterInfoProvider) tryUpdateClusterNameFromKubeadmConfig() {
 		return
 	}
 
-	w.cfg.ClusterName = config.ClusterName
+	w.holders.clusterName = config.ClusterName
 }

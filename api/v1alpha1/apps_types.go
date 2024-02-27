@@ -25,6 +25,7 @@ import (
 
 // AppsSpec defines the desired state of Apps
 type AppsSpec struct {
+	Registry    string             `json:"registry,omitempty"`
 	Apployments map[string]AppSpec `json:"apployments,omitempty"`
 }
 

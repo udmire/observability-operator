@@ -16,6 +16,8 @@ type AppSpec struct {
 	Template  Template `json:"template"`
 	Singleton bool     `json:"singleton,omitempty"`
 
+	Registry string `json:"registry,omitempty"`
+
 	CommonSpec `json:",inline"`
 	Components map[string]ComponentSpec `json:"components,omitempty"`
 

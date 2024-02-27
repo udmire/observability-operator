@@ -192,5 +192,8 @@ func (r *AppsReconciler) normalizeApps(instance *v1alpha1.Apps) {
 	for name, app := range instance.Spec.Apployments {
 		app.Name = name
 		app.Namespace = instance.Namespace
+		if len(app.Registry) == 0 {
+			app.Registry = instance.Spec.Registry
+		}
 	}
 }

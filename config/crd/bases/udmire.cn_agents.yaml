@@ -43322,6 +43322,8 @@ spec:
                 type: string
               namespace:
                 type: string
+              registry:
+                type: string
               role:
                 properties:
                   rules:

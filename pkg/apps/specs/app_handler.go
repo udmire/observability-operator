@@ -51,6 +51,7 @@ func (h *appHandler) Handle(app v1alpha1.AppSpec) (*manifest.AppManifests, error
 	}
 
 	manifest := manifest.NewTemplateBuilder(template).Build()
+	h.updateImagesWithRegistry(app.Registry, manifest)
 	return h.customerizeApp(manifest, app)
 }
 
@@ -223,4 +224,50 @@ func (h *appHandler) customerize(manifest *manifest.Manifests, app v1alpha1.Comm
 	}
 
 	return nil
+}
+
+func (h *appHandler) updateImagesWithRegistry(registry string, manifest *manifest.AppManifests) {
+	if len(registry) == 0 || len(manifest.CompsMenifests) == 0 {
+		return
+	}
+
+	for _, component := range manifest.CompsMenifests {
+		if component.Deployment != nil {
+			h.updatePodImages(registry, &component.Deployment.Spec.Template)
+		} else if component.StatefulSet != nil {
+			h.updatePodImages(registry, &component.StatefulSet.Spec.Template)
+		} else if component.DaemonSet != nil {
+			h.updatePodImages(registry, &component.DaemonSet.Spec.Template)
+		} else if component.ReplicaSet != nil {
+			h.updatePodImages(registry, &component.ReplicaSet.Spec.Template)
+		} else if component.CronJob != nil {
+			h.updatePodImages(registry, &component.CronJob.Spec.JobTemplate.Spec.Template)
+		} else if component.Job != nil {
+			h.updatePodImages(registry, &component.Job.Spec.Template)
+		}
+	}
+}
+
+func (h *appHandler) updatePodImages(registry string, podTemplate *core_v1.PodTemplateSpec) {
+	if len(podTemplate.Spec.InitContainers) > 0 {
+		var containers []core_v1.Container
+		for _, c := range podTemplate.Spec.InitContainers {
+			containers = append(containers, core_v1.Container{
+				Name:  c.Name,
+				Image: utils.UpdateImageRegistry(registry, c.Image),
+			})
+		}
+		podTemplate.Spec.InitContainers, _ = MergePatchContainers(podTemplate.Spec.InitContainers, containers)
+	}
+
+	if len(podTemplate.Spec.Containers) > 0 {
+		var containers []core_v1.Container
+		for _, c := range podTemplate.Spec.Containers {
+			containers = append(containers, core_v1.Container{
+				Name:  c.Name,
+				Image: utils.UpdateImageRegistry(registry, c.Image),
+			})
+		}
+		podTemplate.Spec.Containers, _ = MergePatchContainers(podTemplate.Spec.Containers, containers)
+	}
 }

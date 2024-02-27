@@ -25,6 +25,7 @@ import (
 
 // ExportersSpec defines the desired state of Exporters
 type ExportersSpec struct {
+	Registry    string             `json:"registry,omitempty"`
 	Exployments map[string]AppSpec `json:"exployments,omitempty"`
 }
 

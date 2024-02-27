@@ -48787,6 +48787,8 @@ spec:
                       type: string
                     namespace:
                       type: string
+                    registry:
+                      type: string
                     role:
                       properties:
                         rules:
@@ -49088,6 +49090,8 @@ spec:
                   - template
                   type: object
                 type: object
+              registry:
+                type: string
             type: object
           status:
             description: ExportersStatus defines the observed state of Exporters

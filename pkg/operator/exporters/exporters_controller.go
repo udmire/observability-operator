@@ -191,5 +191,8 @@ func (r *ExportersReconciler) normalizeExporters(instance *v1alpha1.Exporters) {
 	for name, exporter := range instance.Spec.Exployments {
 		exporter.Name = name
 		exporter.Namespace = instance.Namespace
+		if len(exporter.Registry) == 0 {
+			exporter.Registry = instance.Spec.Registry
+		}
 	}
 }
